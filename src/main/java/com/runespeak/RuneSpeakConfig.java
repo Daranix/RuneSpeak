@@ -24,14 +24,6 @@ public interface RuneSpeakConfig extends Config {
     String SECTION_MODEL = "model";
 
     @ConfigSection(
-            name = "Environment",
-            description = "Python environment settings",
-            position = 15,
-            closedByDefault = false
-    )
-    String SECTION_ENVIRONMENT = "environment";
-
-    @ConfigSection(
             name = "Display",
             description = "Overlay display settings",
             position = 20,
@@ -64,30 +56,19 @@ public interface RuneSpeakConfig extends Config {
     @ConfigItem(
             keyName = "modelId",
             name = "HuggingFace Model",
-            description = "Model ID from HuggingFace Hub (e.g., facebook/nllb-200-distilled-600M)",
+            description = "Model ID from HuggingFace Hub with ONNX files (e.g., echarlaix/t5-small-onnx)",
             position = 0,
             section = SECTION_MODEL
     )
     default String getModelId() {
-        return "facebook/nllb-200-distilled-600M";
-    }
-
-    @ConfigItem(
-            keyName = "autoDownload",
-            name = "Auto-download Model",
-            description = "Automatically download model on first use",
-            position = 1,
-            section = SECTION_MODEL
-    )
-    default boolean isAutoDownload() {
-        return true;
+        return "echarlaix/t5-small-onnx";
     }
 
     @ConfigItem(
             keyName = "cacheSize",
             name = "Max Cache Entries",
             description = "Maximum number of translations to keep in cache (file-persisted)",
-            position = 2,
+            position = 1,
             section = SECTION_MODEL
     )
     default int getCacheSize() {
@@ -98,21 +79,10 @@ public interface RuneSpeakConfig extends Config {
             keyName = "modelCacheDir",
             name = "Cache Directory",
             description = "Directory to store downloaded models and translation cache",
-            position = 3,
+            position = 2,
             section = SECTION_MODEL
     )
     default String getModelCacheDir() {
-        return "";
-    }
-
-    @ConfigItem(
-            keyName = "pythonPath",
-            name = "Python Path",
-            description = "Path to Python 3 executable (leave empty to auto-detect from PATH)",
-            position = 0,
-            section = SECTION_ENVIRONMENT
-    )
-    default String getPythonPath() {
         return "";
     }
 

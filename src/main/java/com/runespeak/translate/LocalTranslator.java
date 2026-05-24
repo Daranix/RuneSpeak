@@ -10,12 +10,11 @@ import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Singleton
 public class LocalTranslator {
-    private final ModelManager modelManager;
+    private final OnnxTranslationEngine engine;
     private final TranslationCache cache;
     private final ExecutorService executor;
     private final RuneSpeakConfig config;
@@ -28,10 +27,9 @@ public class LocalTranslator {
         this.config = config;
 
         Path baseDir = resolveCacheDir();
-        Path cacheDir = baseDir.resolve("cache");
 
-        this.modelManager = new ModelManager(baseDir, config.getPythonPath());
-        this.cache = new TranslationCache(cacheDir, config.getCacheSize());
+        this.engine = new OnnxTranslationEngine(baseDir);
+        this.cache = new TranslationCache(baseDir.resolve("cache"), config.getCacheSize());
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "runespeak-translate");
             t.setDaemon(true);
@@ -39,39 +37,21 @@ public class LocalTranslator {
         });
     }
 
-    private Path resolveCacheDir() {
-        String custom = config.getModelCacheDir();
-        if (custom != null && !custom.isBlank()) {
-            return Path.of(custom);
-        }
-        return Path.of(System.getProperty("user.home"), ".runespeak");
-    }
-
     public void initialize(String modelId) {
         executor.submit(() -> {
             try {
                 log.info("Loading model: {}", modelId);
-                modelManager.loadModel(modelId);
+                engine.loadModel(modelId);
                 log.info("Model loaded: {}", modelId);
             } catch (Exception e) {
-                log.error("Failed to load model: {}", e.getMessage(), e);
+                log.error("Failed to load model: {}", e.getMessage());
             }
         });
     }
 
-    public ModelManager.DependencyResult checkDependencies() {
-        return modelManager.checkDependencies();
-    }
-
-    public ModelManager.DependencyStatus getDependencyStatus() {
-        return modelManager.getDependencyStatus();
-    }
-
     public void applyConfig() {
         cache.setMaxSize(config.getCacheSize());
-        modelManager.setPythonPath(config.getPythonPath());
-        Path newBase = resolveCacheDir();
-        log.info("Config applied — cache dir: {}, max entries: {}", newBase, config.getCacheSize());
+        log.info("Config applied — max entries: {}", config.getCacheSize());
     }
 
     public void setLanguages(Language source, Language target) {
@@ -93,17 +73,18 @@ public class LocalTranslator {
 
         String srcCode = currentSource.getFloresCode();
         String tgtCode = currentTarget.getFloresCode();
+        String srcName = currentSource.getDisplayName();
+        String tgtName = currentTarget.getDisplayName();
 
         String cached = cache.get(text, srcCode, tgtCode);
         if (cached != null) return cached;
 
-        if (!modelManager.isLoaded()) {
+        if (!engine.isLoaded()) {
             return "\u23F3 " + text;
         }
 
         try {
-            String result = modelManager.translate(text, srcCode, tgtCode)
-                    .get(30, TimeUnit.SECONDS);
+            String result = engine.translate(text, srcName, tgtName).get(60, java.util.concurrent.TimeUnit.SECONDS);
             cache.put(text, result, srcCode, tgtCode);
             return result != null ? result : text;
         } catch (Exception e) {
@@ -128,11 +109,11 @@ public class LocalTranslator {
             return CompletableFuture.completedFuture(cached);
         }
 
-        if (!modelManager.isLoaded()) {
+        if (!engine.isLoaded()) {
             return CompletableFuture.completedFuture("\u23F3 " + text);
         }
 
-        return modelManager.translate(text, srcCode, tgtCode)
+        return engine.translate(text, srcCode, tgtCode)
                 .thenApply(result -> {
                     cache.put(text, result, srcCode, tgtCode);
                     return result;
@@ -144,15 +125,11 @@ public class LocalTranslator {
     }
 
     public boolean isReady() {
-        return modelManager.isLoaded();
+        return engine.isLoaded();
     }
 
     public boolean isLoading() {
-        return modelManager.isLoading();
-    }
-
-    public boolean isModelAvailable() {
-        return modelManager.isModelAvailable();
+        return engine.isLoading();
     }
 
     public Path getCacheDir() {
@@ -164,9 +141,17 @@ public class LocalTranslator {
     }
 
     public void shutdown() {
-        modelManager.shutdown();
+        engine.shutdown();
         cache.shutdown();
         executor.shutdown();
+    }
+
+    private Path resolveCacheDir() {
+        String custom = config.getModelCacheDir();
+        if (custom != null && !custom.isBlank()) {
+            return Path.of(custom);
+        }
+        return Path.of(System.getProperty("user.home"), ".runespeak");
     }
 
     private static String truncate(String text, int max) {

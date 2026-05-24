@@ -66,8 +66,6 @@ public class RuneSpeakPlugin extends Plugin {
 
     private RuneSpeakPanel panel;
     private NavigationButton navButton;
-    private boolean modelInitiated = false;
-
     @Override
     protected void startUp() {
         log.info("RuneSpeak starting up...");
@@ -114,11 +112,6 @@ public class RuneSpeakPlugin extends Plugin {
     public void onGameTick(GameTick tick) {
         if (client.getGameState() != GameState.LOGGED_IN) return;
 
-        if (!modelInitiated) {
-            startModelLoading();
-            return;
-        }
-
         if (config.translateNpcDialogue()) {
             dialogCapture.checkAndTranslateDialog();
         }
@@ -146,7 +139,8 @@ public class RuneSpeakPlugin extends Plugin {
         String text = event.getOverheadText();
         translator.translateAsync(text).thenAccept(translated -> {
             if (!translated.equals(text) && !translated.startsWith("⏳")) {
-                log.debug("Overhead: {} -> {}", text, translated);
+                event.getActor().setOverheadText(translated);
+                log.info("Overhead: {} -> {}", text, translated);
             }
         });
     }
@@ -182,7 +176,6 @@ public class RuneSpeakPlugin extends Plugin {
     }
 
     private void startModelLoading() {
-        modelInitiated = true;
         String modelId = config.getModelId();
         log.info("Loading model: {}", modelId);
         translator.initialize(modelId);

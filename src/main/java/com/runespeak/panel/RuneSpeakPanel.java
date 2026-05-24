@@ -4,7 +4,6 @@ import com.runespeak.Language;
 import com.runespeak.RuneSpeakConfig;
 import com.runespeak.capture.ChatCapture;
 import com.runespeak.translate.LocalTranslator;
-import com.runespeak.translate.ModelManager;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.inject.Inject;
@@ -13,6 +12,8 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -34,15 +35,13 @@ public class RuneSpeakPanel extends PluginPanel {
     private Timer refreshTimer;
 
     private static final String[] MODEL_PRESETS = {
+            "echarlaix/t5-small-onnx",
+            "google-t5/t5-small",
+            "google-t5/t5-base",
             "facebook/nllb-200-distilled-600M",
-            "facebook/nllb-200-distilled-1.3B",
-            "facebook/nllb-200-3.3B",
             "Helsinki-NLP/opus-mt-en-es",
             "Helsinki-NLP/opus-mt-en-fr",
-            "Helsinki-NLP/opus-mt-en-de",
-            "Helsinki-NLP/opus-mt-en-zh",
-            "google-t5/t5-small",
-            "google-t5/t5-base"
+            "Helsinki-NLP/opus-mt-en-de"
     };
 
     private JComboBox<Language> sourceCombo;
@@ -50,10 +49,7 @@ public class RuneSpeakPanel extends PluginPanel {
     private JComboBox<String> modelCombo;
     private JSpinner cacheSizeSpinner;
     private JTextField cacheDirField;
-    private JTextField pythonPathField;
     private JButton applyButton;
-    private JLabel depStatusLabel;
-    private JButton checkDepsButton;
 
     @Inject
     public RuneSpeakPanel(RuneSpeakConfig config, ConfigManager configManager, LocalTranslator translator, ChatCapture chatCapture) {
@@ -72,7 +68,6 @@ public class RuneSpeakPanel extends PluginPanel {
         JPanel scrollContent = new JPanel();
         scrollContent.setLayout(new BoxLayout(scrollContent, BoxLayout.Y_AXIS));
         addHeader(scrollContent);
-        addEnvironmentSection(scrollContent);
         addSettingsSection(scrollContent);
         addLogSection(scrollContent);
 
@@ -110,41 +105,6 @@ public class RuneSpeakPanel extends PluginPanel {
         header.add(cacheCountLabel, gbc);
 
         parent.add(header);
-    }
-
-    private void addEnvironmentSection(JPanel parent) {
-        JPanel section = new JPanel(new GridBagLayout());
-        section.setBorder(new TitledBorder("Python Environment"));
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.weightx = 1.0;
-        gbc.insets = new Insets(3, 6, 3, 6);
-        gbc.gridwidth = GridBagConstraints.REMAINDER;
-
-        JPanel pyRow = new JPanel(new BorderLayout(4, 0));
-        pyRow.add(new JLabel("Python path:"), BorderLayout.WEST);
-        pythonPathField = new JTextField();
-        pythonPathField.setText(config.getPythonPath());
-        pythonPathField.setToolTipText("Leave empty to auto-detect from PATH");
-        pyRow.add(pythonPathField, BorderLayout.CENTER);
-        section.add(pyRow, gbc);
-
-        depStatusLabel = new JLabel("Dependencies: not checked");
-        depStatusLabel.setFont(new Font("Dialog", Font.PLAIN, 10));
-        section.add(depStatusLabel, gbc);
-
-        JPanel depBtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
-        checkDepsButton = new JButton("Check Dependencies");
-        checkDepsButton.addActionListener(e -> runDependencyCheck());
-        depBtnRow.add(checkDepsButton);
-
-        JButton installHintBtn = new JButton("Show Install Guide");
-        installHintBtn.addActionListener(e -> showInstallGuide());
-        depBtnRow.add(installHintBtn);
-
-        section.add(depBtnRow, gbc);
-
-        parent.add(section);
     }
 
     private void addSettingsSection(JPanel parent) {
@@ -283,72 +243,10 @@ public class RuneSpeakPanel extends PluginPanel {
         }
     }
 
-    private void runDependencyCheck() {
-        checkDepsButton.setEnabled(false);
-        checkDepsButton.setText("Checking...");
-        depStatusLabel.setText("Python: checking...");
-
-        SwingWorker<ModelManager.DependencyResult, Void> worker = new SwingWorker<>() {
-            @Override
-            protected ModelManager.DependencyResult doInBackground() {
-                return translator.checkDependencies();
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    ModelManager.DependencyResult result = get();
-                    if (result.isAllMet()) {
-                        depStatusLabel.setText("Python: " + result.getPythonVersion()
-                                + " — " + result.getStatusMessage());
-                        statusLabel.setText("Status: Dependencies OK — "
-                                + (result.isCudaAvailable() ? "CUDA ready" : "CPU mode"));
-                    } else {
-                        depStatusLabel.setText("Python: " + result.getPythonVersion()
-                                + " — " + result.getStatusMessage());
-                        statusLabel.setText("Status: Missing Python packages — click Show Install Guide");
-                    }
-                } catch (Exception ex) {
-                    depStatusLabel.setText("Dependencies: check failed (" + ex.getMessage() + ")");
-                    statusLabel.setText("Status: Dep check error");
-                } finally {
-                    checkDepsButton.setEnabled(true);
-                    checkDepsButton.setText("Check Dependencies");
-                }
-            }
-        };
-        worker.execute();
-    }
-
-    private void showInstallGuide() {
-        String guide = "Python Dependencies Installation Guide\n"
-                + "=====================================\n\n"
-                + "1. Ensure Python 3.8+ is installed and on PATH\n"
-                + "   (or set a custom path in the field above)\n\n"
-                + "2. Install required packages:\n\n"
-                + "   pip install torch transformers sentencepiece protobuf accelerate\n\n"
-                + "   For CUDA (GPU) support on Windows:\n"
-                + "   pip install torch --index-url https://download.pytorch.org/whl/cu121\n\n"
-                + "3. Click 'Check Dependencies' to verify\n\n"
-                + "4. Click 'Apply Settings' then 'Reload Model' to start\n\n"
-                + "Tip: First model download (~1.2GB) happens on first load.\n"
-                + "     Subsequent loads use the local cache.";
-        JTextArea textArea = new JTextArea(guide);
-        textArea.setEditable(false);
-        textArea.setFont(new Font("Monospaced", Font.PLAIN, 11));
-        textArea.setCaretPosition(0);
-        JOptionPane.showMessageDialog(this, new JScrollPane(textArea),
-                "Install Guide", JOptionPane.INFORMATION_MESSAGE);
-    }
-
     private void applySettings() {
         Language src = (Language) sourceCombo.getSelectedItem();
         Language tgt = (Language) targetCombo.getSelectedItem();
         translator.setLanguages(src, tgt);
-
-        String pyPath = pythonPathField.getText().trim();
-        configManager.setConfiguration("runespeak", "pythonPath", pyPath);
-        translator.applyConfig();
 
         int newSize = (Integer) cacheSizeSpinner.getValue();
         translator.getCache().setMaxSize(newSize);
@@ -366,8 +264,8 @@ public class RuneSpeakPanel extends PluginPanel {
             translator.initialize(selectedModel);
         }
 
-        log.info("Settings applied — {} → {}, model: {}, cache: {} max, py: {}",
-                src.getDisplayName(), tgt.getDisplayName(), selectedModel, newSize, pyPath.isEmpty() ? "auto" : pyPath);
+        log.info("Settings applied — {} → {}, model: {}, cache: {} max",
+                src.getDisplayName(), tgt.getDisplayName(), selectedModel, newSize);
         applyButton.setText("Applied \u2713");
         Timer reset = new Timer(2000, e -> applyButton.setText("Apply Settings"));
         reset.setRepeats(false);
@@ -381,18 +279,11 @@ public class RuneSpeakPanel extends PluginPanel {
 
     private void refreshStatus() {
         if (translator.isReady()) {
-            ModelManager.DependencyStatus ds = translator.getDependencyStatus();
-            String device = ds.isCudaAvailable() ? "CUDA" : "CPU";
-            statusLabel.setText("Status: Ready (" + device + ")");
+            statusLabel.setText("Status: Ready (ONNX Runtime)");
         } else if (translator.isLoading()) {
-            statusLabel.setText("Status: Loading model (first run may download ~1.2GB)...");
+            statusLabel.setText("Status: Loading model (downloading if needed)...");
         } else {
-            ModelManager.DependencyStatus ds = translator.getDependencyStatus();
-            if (ds.getPythonVersion() != null && !ds.getPythonVersion().isEmpty()) {
-                statusLabel.setText("Status: " + ds.getStatusMessage());
-            } else {
-                statusLabel.setText("Status: Waiting — model not loaded");
-            }
+            statusLabel.setText("Status: Waiting — model not loaded");
         }
 
         modelLabel.setText("Model: " + config.getModelId());

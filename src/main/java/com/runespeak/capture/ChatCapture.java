@@ -7,13 +7,13 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.MessageNode;
 import net.runelite.api.events.ChatMessage;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Singleton
@@ -44,6 +44,11 @@ public class ChatCapture {
 
         translator.translateAsync(message).thenAccept(translated -> {
             if (!translated.equals(message)) {
+                MessageNode messageNode = event.getMessageNode();
+                if (messageNode != null) {
+                    messageNode.setRuneLiteFormatMessage(translated);
+                    client.refreshChat();
+                }
                 synchronized (translatedMessages) {
                     translatedMessages.add(new TranslatedMessage(
                             event.getType(),

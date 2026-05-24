@@ -11,16 +11,10 @@ import net.runelite.api.widgets.WidgetInfo;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Singleton
 public class DialogCapture {
-    private static final int DIALOG_NPC_HEAD = WidgetInfo.DIALOG_NPC_HEAD_MODEL.getGroupId();
-    private static final int DIALOG_NPC_TEXT = WidgetInfo.DIALOG_NPC_TEXT.getChildId();
-    private static final int DIALOG_PLAYER_TEXT = WidgetInfo.DIALOG_PLAYER_TEXT.getChildId();
-    private static final int DIALOG_SPRITE_TEXT = WidgetInfo.DIALOG_SPRITE_TEXT.getChildId();
-
     private final Client client;
     private final RuneSpeakConfig config;
     private final LocalTranslator translator;
@@ -65,9 +59,11 @@ public class DialogCapture {
                 Language target = config.getTargetLanguage();
                 translator.setLanguages(source, target);
 
+Widget dialogWidget = activeDialog;
                 translator.translateAsync(text).thenAccept(translated -> {
-                    if (!translated.startsWith("⏳") && text.equals(currentDialogOriginal)) {
+                    if (!translated.startsWith("\u23F3") && text.equals(currentDialogOriginal)) {
                         currentDialogTranslation = translated;
+                        dialogWidget.setText(translated);
                     } else {
                         currentDialogTranslation = text;
                     }

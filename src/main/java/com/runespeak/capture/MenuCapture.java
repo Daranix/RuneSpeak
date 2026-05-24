@@ -42,21 +42,21 @@ public class MenuCapture {
             String option = entry.getOption();
             String target_text = entry.getTarget();
 
-            if (option != null && !option.isEmpty()) {
-                translateAndCache(option, "option:" + option);
+            if (option != null && !option.isEmpty() && !optionTranslations.containsKey("option:" + option)) {
+                String translated = translator.translateSync(option);
+                if (!translated.equals(option)) {
+                    optionTranslations.put("option:" + option, translated);
+                    entry.setOption(translated);
+                }
             }
-            if (target_text != null && !target_text.isEmpty() && !target_text.equals(option)) {
-                translateAndCache(target_text, "target:" + target_text);
+            if (target_text != null && !target_text.isEmpty() && !target_text.equals(option)
+                    && !optionTranslations.containsKey("target:" + target_text)) {
+                String translated = translator.translateSync(target_text);
+                if (!translated.equals(target_text)) {
+                    optionTranslations.put("target:" + target_text, translated);
+                    entry.setTarget(translated);
+                }
             }
-        }
-    }
-
-    private void translateAndCache(String text, String cacheKey) {
-        if (optionTranslations.containsKey(cacheKey)) return;
-
-        String translated = translator.translateSync(text);
-        if (!translated.equals(text)) {
-            optionTranslations.put(cacheKey, translated);
         }
     }
 
