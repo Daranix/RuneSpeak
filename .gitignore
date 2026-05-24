@@ -1,0 +1,17 @@
+.gradle/
+build/
+*.class
+*.jar
+*.log
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+/bin/
+/out/
+/nbproject/
+.DS_Store
+Thumbs.db
+runelite-plugin.properties
