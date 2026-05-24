@@ -24,6 +24,14 @@ public interface RuneSpeakConfig extends Config {
     String SECTION_MODEL = "model";
 
     @ConfigSection(
+            name = "Environment",
+            description = "Python environment settings",
+            position = 15,
+            closedByDefault = false
+    )
+    String SECTION_ENVIRONMENT = "environment";
+
+    @ConfigSection(
             name = "Display",
             description = "Overlay display settings",
             position = 20,
@@ -94,6 +102,17 @@ public interface RuneSpeakConfig extends Config {
             section = SECTION_MODEL
     )
     default String getModelCacheDir() {
+        return "";
+    }
+
+    @ConfigItem(
+            keyName = "pythonPath",
+            name = "Python Path",
+            description = "Path to Python 3 executable (leave empty to auto-detect from PATH)",
+            position = 0,
+            section = SECTION_ENVIRONMENT
+    )
+    default String getPythonPath() {
         return "";
     }
 

@@ -11,7 +11,7 @@ import net.runelite.api.events.MenuOpened;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
 @Slf4j
@@ -21,8 +21,7 @@ public class MenuCapture {
     private final RuneSpeakConfig config;
     private final LocalTranslator translator;
 
-    @Getter
-    private final Map<String, String> optionTranslations = new HashMap<>();
+    private final Map<String, String> optionTranslations = new ConcurrentHashMap<>();
 
     @Inject
     public MenuCapture(Client client, RuneSpeakConfig config, LocalTranslator translator) {
@@ -57,21 +56,15 @@ public class MenuCapture {
 
         String translated = translator.translateSync(text);
         if (!translated.equals(text)) {
-            synchronized (optionTranslations) {
-                optionTranslations.put(cacheKey, translated);
-            }
+            optionTranslations.put(cacheKey, translated);
         }
     }
 
     public String getTranslation(String cacheKey) {
-        synchronized (optionTranslations) {
-            return optionTranslations.get(cacheKey);
-        }
+        return optionTranslations.get(cacheKey);
     }
 
     public void clear() {
-        synchronized (optionTranslations) {
-            optionTranslations.clear();
-        }
+        optionTranslations.clear();
     }
 }

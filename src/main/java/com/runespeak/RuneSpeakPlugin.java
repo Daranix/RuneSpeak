@@ -143,7 +143,7 @@ public class RuneSpeakPlugin extends Plugin {
         if (!config.translateOverhead()) return;
         if (client.getGameState() != GameState.LOGGED_IN) return;
 
-        String text = event.getText();
+        String text = event.getOverheadText();
         translator.translateAsync(text).thenAccept(translated -> {
             if (!translated.equals(text) && !translated.startsWith("⏳")) {
                 log.debug("Overhead: {} -> {}", text, translated);

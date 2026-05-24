@@ -151,10 +151,18 @@ public class TranslationCache {
             if (c == '\\' && i + 1 < s.length()) {
                 char n = s.charAt(i + 1);
                 switch (n) {
-                    case 'n' -> out.append('\n');
-                    case 'r' -> out.append('\r');
-                    case '0' -> out.append('\0');
-                    default -> out.append(n);
+                    case 'n':
+                        out.append('\n');
+                        break;
+                    case 'r':
+                        out.append('\r');
+                        break;
+                    case '0':
+                        out.append('\0');
+                        break;
+                    default:
+                        out.append(n);
+                        break;
                 }
                 i++;
             } else {

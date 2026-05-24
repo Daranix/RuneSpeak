@@ -105,6 +105,9 @@ public class TranslationOverlay extends Overlay {
         MenuEntry[] entries = client.getMenuEntries();
         if (entries == null || entries.length == 0) return;
 
+        Font originalFont = graphics.getFont();
+        int y = 30;
+
         for (MenuEntry entry : entries) {
             String option = entry.getOption();
             if (option == null || option.isEmpty()) continue;
@@ -117,7 +120,21 @@ public class TranslationOverlay extends Overlay {
             if (target != null && !target.isEmpty() && !target.equals(option)) {
                 targetTranslation = menuCapture.getTranslation("target:" + target);
             }
+
+            graphics.setFont(new Font("Dialog", Font.BOLD, 12));
+            Color textColor = parseColor(config.getTranslationColor());
+            graphics.setColor(new Color(0, 0, 0, 180));
+            String display = "[AI] " + translation;
+            if (targetTranslation != null) {
+                display += " (" + targetTranslation + ")";
+            }
+            graphics.fillRect(2, y - 12, graphics.getFontMetrics().stringWidth(display) + 6, 16);
+            graphics.setColor(textColor);
+            graphics.drawString(display, 4, y);
+            y += 18;
         }
+
+        graphics.setFont(originalFont);
     }
 
     private Color parseColor(String hex) {

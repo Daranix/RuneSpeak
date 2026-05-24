@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Singleton
@@ -27,10 +28,9 @@ public class LocalTranslator {
         this.config = config;
 
         Path baseDir = resolveCacheDir();
-        Path modelDir = baseDir.resolve("models");
         Path cacheDir = baseDir.resolve("cache");
 
-        this.modelManager = new ModelManager(modelDir);
+        this.modelManager = new ModelManager(baseDir, config.getPythonPath());
         this.cache = new TranslationCache(cacheDir, config.getCacheSize());
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "runespeak-translate");
@@ -51,10 +51,6 @@ public class LocalTranslator {
         executor.submit(() -> {
             try {
                 log.info("Loading model: {}", modelId);
-                modelManager.setLanguages(
-                        currentSource.getFloresCode(),
-                        currentTarget.getFloresCode()
-                );
                 modelManager.loadModel(modelId);
                 log.info("Model loaded: {}", modelId);
             } catch (Exception e) {
@@ -63,8 +59,17 @@ public class LocalTranslator {
         });
     }
 
+    public ModelManager.DependencyResult checkDependencies() {
+        return modelManager.checkDependencies();
+    }
+
+    public ModelManager.DependencyStatus getDependencyStatus() {
+        return modelManager.getDependencyStatus();
+    }
+
     public void applyConfig() {
         cache.setMaxSize(config.getCacheSize());
+        modelManager.setPythonPath(config.getPythonPath());
         Path newBase = resolveCacheDir();
         log.info("Config applied — cache dir: {}, max entries: {}", newBase, config.getCacheSize());
     }
@@ -72,7 +77,6 @@ public class LocalTranslator {
     public void setLanguages(Language source, Language target) {
         this.currentSource = source;
         this.currentTarget = target;
-        modelManager.setLanguages(source.getFloresCode(), target.getFloresCode());
     }
 
     public Language getCurrentSource() {
@@ -87,16 +91,20 @@ public class LocalTranslator {
         if (text == null || text.isEmpty() || text.isBlank()) return text;
         if (currentSource == currentTarget) return text;
 
-        String cached = cache.get(text, currentSource.getFloresCode(), currentTarget.getFloresCode());
+        String srcCode = currentSource.getFloresCode();
+        String tgtCode = currentTarget.getFloresCode();
+
+        String cached = cache.get(text, srcCode, tgtCode);
         if (cached != null) return cached;
 
         if (!modelManager.isLoaded()) {
-            return "⏳ " + text;
+            return "\u23F3 " + text;
         }
 
         try {
-            String result = modelManager.getPredictor().predict(text);
-            cache.put(text, result, currentSource.getFloresCode(), currentTarget.getFloresCode());
+            String result = modelManager.translate(text, srcCode, tgtCode)
+                    .get(30, TimeUnit.SECONDS);
+            cache.put(text, result, srcCode, tgtCode);
             return result != null ? result : text;
         } catch (Exception e) {
             log.error("Translation failed for '{}': {}", truncate(text, 30), e.getMessage());
@@ -112,12 +120,27 @@ public class LocalTranslator {
             return CompletableFuture.completedFuture(text);
         }
 
-        String cached = cache.get(text, currentSource.getFloresCode(), currentTarget.getFloresCode());
+        String srcCode = currentSource.getFloresCode();
+        String tgtCode = currentTarget.getFloresCode();
+
+        String cached = cache.get(text, srcCode, tgtCode);
         if (cached != null) {
             return CompletableFuture.completedFuture(cached);
         }
 
-        return CompletableFuture.supplyAsync(() -> translateSync(text), executor);
+        if (!modelManager.isLoaded()) {
+            return CompletableFuture.completedFuture("\u23F3 " + text);
+        }
+
+        return modelManager.translate(text, srcCode, tgtCode)
+                .thenApply(result -> {
+                    cache.put(text, result, srcCode, tgtCode);
+                    return result;
+                })
+                .exceptionally(e -> {
+                    log.error("Async translation failed: {}", e.getMessage());
+                    return text;
+                });
     }
 
     public boolean isReady() {

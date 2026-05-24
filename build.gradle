@@ -15,14 +15,10 @@ def runeLiteVersion = 'latest.release'
 dependencies {
     compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
 
-    compileOnly 'org.projectlombok:lombok:1.18.30'
-    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    compileOnly 'org.projectlombok:lombok:1.18.46'
+    annotationProcessor 'org.projectlombok:lombok:1.18.46'
 
-    implementation 'ai.djl:api:0.31.0'
-    implementation 'ai.djl.huggingface:tokenizers:0.31.0'
-    implementation 'ai.djl.huggingface:transformers:0.31.0'
-    implementation 'ai.djl.pytorch:pytorch-engine:0.31.0'
-    implementation 'ai.djl.pytorch:pytorch-jni:0.31.0'
+    implementation 'org.json:json:20231013'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
@@ -37,9 +33,4 @@ tasks.withType(JavaCompile) {
     options.release.set(11)
 }
 
-task copyResources(type: Copy) {
-    from 'src/main/resources'
-    into "${buildDir}/resources/main"
-}
 
-processResources.dependsOn copyResources
