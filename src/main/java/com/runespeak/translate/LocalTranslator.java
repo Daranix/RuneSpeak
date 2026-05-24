@@ -38,13 +38,15 @@ public class LocalTranslator {
     }
 
     public void initialize(String modelId) {
+
         executor.submit(() -> {
+            log.info("Translator executor started for model: {}", modelId);
             try {
                 log.info("Loading model: {}", modelId);
                 engine.loadModel(modelId);
                 log.info("Model loaded: {}", modelId);
             } catch (Exception e) {
-                log.error("Failed to load model: {}", e.getMessage());
+                log.error("Failed to load model: {}", e.getMessage(), e);
             }
         });
     }
@@ -138,6 +140,10 @@ public class LocalTranslator {
 
     public TranslationCache getCache() {
         return cache;
+    }
+
+    public OnnxTranslationEngine getEngine() {
+        return engine;
     }
 
     public void shutdown() {

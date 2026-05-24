@@ -177,8 +177,9 @@ public class RuneSpeakPlugin extends Plugin {
 
     private void startModelLoading() {
         String modelId = config.getModelId();
-        log.info("Loading model: {}", modelId);
+        log.info("startModelLoading: Loading model: {}", modelId);
         translator.initialize(modelId);
+        log.info("startModelLoading: Initialization submitted to executor");
     }
 
     private void initPanel() {

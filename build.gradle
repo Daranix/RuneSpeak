@@ -16,14 +16,22 @@ repositories {
 def runeLiteVersion = 'latest.release'
 def pluginMainClass = 'com.runespeak.RuneSpeakPluginTest'
 
+configurations.all {
+    resolutionStrategy {
+        force 'com.microsoft.onnxruntime:onnxruntime:1.19.2'
+    }
+}
+
 dependencies {
     compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
 
     compileOnly 'org.projectlombok:lombok:1.18.46'
     annotationProcessor 'org.projectlombok:lombok:1.18.46'
 
-    implementation 'com.microsoft.onnxruntime:onnxruntime:1.26.0'
-    implementation 'ai.djl.huggingface:tokenizers:0.36.0'
+    implementation 'com.microsoft.onnxruntime:onnxruntime:1.19.2'
+    implementation('ai.djl.huggingface:tokenizers:0.36.0') {
+        exclude group: 'com.microsoft.onnxruntime'
+    }
 
     runtimeOnly 'ch.qos.logback:logback-classic:1.5.16'
 
@@ -46,16 +54,25 @@ tasks.register('shadowJar', Jar) {
     manifest {
         attributes('Main-Class': pluginMainClass, 'Multi-Release': true)
     }
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    duplicatesStrategy = DuplicatesStrategy.FIRST
+
     from sourceSets.main.output
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
+
+    // Strip signature/index files that break fat jars
     exclude 'META-INF/INDEX.LIST'
     exclude 'META-INF/*.SF'
     exclude 'META-INF/*.DSA'
     exclude 'META-INF/*.RSA'
     exclude '**/module-info.class'
+
+    // Preserve native libraries needed by ORT and DJL
+    filesMatching('**/*.so')    { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
+    filesMatching('**/*.dll')   { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
+    filesMatching('**/*.dylib') { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
 }
 
 tasks.register('runRuneLite', JavaExec) {
@@ -66,4 +83,7 @@ tasks.register('runRuneLite', JavaExec) {
     mainClass = pluginMainClass
     args '--developer-mode', '--debug'
     jvmArgs '-ea'
+
+    // Helps ORT find its native lib when running outside a fat jar
+    jvmArgs "-Djava.library.path=${configurations.runtimeClasspath.asPath}"
 }

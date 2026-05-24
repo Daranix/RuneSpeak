@@ -48,60 +48,89 @@ public class OnnxTranslationEngine {
     }
 
     public synchronized void loadModel(String modelId) throws IOException {
-        if (loaded && currentModelId != null && currentModelId.equals(modelId)) return;
-        if (loading) return;
+        log.info("Loading model: {}", modelId);
+        if (loaded && currentModelId != null && currentModelId.equals(modelId)) {
+            log.info("Model {} already loaded, skipping", modelId);
+            return;
+        }
+        if (loading) {
+            log.info("Model {} already loading, skipping", modelId);
+            return;
+        }
 
+        log.info("Shutting down previous model (if any)");
         shutdown();
         loading = true;
         currentModelId = modelId;
+        log.info("Set loading=true, currentModelId={}", modelId);
 
         try {
+            log.info("Creating models directory: {}", modelsDir);
             Files.createDirectories(modelsDir);
             Path modelPath = modelsDir.resolve(sanitizeModelId(modelId));
+            log.info("Model path: {}", modelPath);
 
+            log.info("Downloading encoder_model.onnx");
             downloadIfMissing(modelId, modelPath, "encoder_model.onnx");
+            log.info("Downloading decoder_model.onnx");
             downloadIfMissing(modelId, modelPath, "decoder_model.onnx");
+            log.info("Downloading tokenizer.json");
             downloadIfMissing(modelId, modelPath, "tokenizer.json");
 
+            log.info("Creating OrtEnvironment");
             ortEnv = OrtEnvironment.getEnvironment();
+            log.info("OrtEnvironment created: {}", ortEnv);
 
+            log.info("Creating session options");
             OrtSession.SessionOptions opts = new OrtSession.SessionOptions();
             opts.setIntraOpNumThreads(2);
             opts.setSessionLogLevel(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING);
             opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.EXTENDED_OPT);
+            log.info("Session options created");
 
+            log.info("Creating encoder session from: {}", modelPath.resolve("encoder_model.onnx"));
             encoderSession = ortEnv.createSession(
                     modelPath.resolve("encoder_model.onnx").toString(), opts);
+            log.info("Encoder session created: {}", encoderSession);
+
+            log.info("Creating decoder session from: {}", modelPath.resolve("decoder_model.onnx"));
             decoderSession = ortEnv.createSession(
                     modelPath.resolve("decoder_model.onnx").toString(), opts);
+            log.info("Decoder session created: {}", decoderSession);
 
-            log.info("Encoder inputs: {}", encoderSession.getInputInfo().keySet());
-            log.info("Decoder inputs: {}", decoderSession.getInputInfo().keySet());
+            log.info("Logging encoder inputs: {}", encoderSession.getInputInfo().keySet());
+            log.info("Logging decoder inputs: {}", decoderSession.getInputInfo().keySet());
 
             Map<String, String> tokOpts = new HashMap<>();
             tokOpts.put("addSpecialTokens", "false");
+            log.info("Creating HuggingFaceTokenizer from: {}", modelPath.resolve("tokenizer.json"));
             tokenizer = HuggingFaceTokenizer.newInstance(
                     modelPath.resolve("tokenizer.json"), tokOpts);
+            log.info("Tokenizer created: {}", tokenizer);
 
+            log.info("Checking for config.json");
             downloadIfMissing(modelId, modelPath, "config.json");
             Path configPath = modelPath.resolve("config.json");
             if (Files.exists(configPath)) {
+                log.info("Reading config from: {}", configPath);
                 readConfig(configPath);
             } else {
+                log.info("No config.json found, using defaults");
                 decoderStartTokenId = 0;
                 eosTokenId = 1;
             }
 
             loaded = true;
-            log.info("ONNX model loaded: {} (start={}, eos={}, max={})",
+            log.info("ONNX model loaded successfully: {} (start={}, eos={}, max={})",
                     modelId, decoderStartTokenId, eosTokenId, maxLength);
         } catch (Exception e) {
             loaded = false;
-            log.error("Failed to load model {}: {}", modelId, e.getMessage());
+            log.error("Failed to load model {}: {}", modelId, e.getMessage(), e);
             if (e instanceof IOException) throw (IOException) e;
             throw new IOException("Failed to load model: " + modelId, e);
         } finally {
             loading = false;
+            log.info("Set loading=false for model {}", modelId);
         }
     }
 
