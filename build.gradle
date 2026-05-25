@@ -55,7 +55,7 @@ tasks.register('shadowJar', Jar) {
         attributes('Main-Class': pluginMainClass, 'Multi-Release': true)
     }
 
-    duplicatesStrategy = DuplicatesStrategy.FIRST
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
     from sourceSets.main.output
     from {
@@ -78,6 +78,7 @@ tasks.register('shadowJar', Jar) {
 tasks.register('runRuneLite', JavaExec) {
     group = 'runelite'
     description = 'Run RuneLite with RuneSpeak plugin'
+    dependsOn 'classes', 'testClasses'
 
     classpath = sourceSets.test.runtimeClasspath
     mainClass = pluginMainClass
