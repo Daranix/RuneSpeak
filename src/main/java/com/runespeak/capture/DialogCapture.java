@@ -51,7 +51,7 @@ public class DialogCapture {
 
         if (activeDialog != null) {
             String text = activeDialog.getText();
-            if (text != null && !text.isEmpty() && !text.equals(currentDialogOriginal)) {
+            if (text != null && !text.isEmpty() && !text.equals(currentDialogOriginal) && !text.equals(currentDialogTranslation)) {
                 dialogActive = true;
                 currentDialogOriginal = text;
 
