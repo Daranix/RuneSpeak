@@ -10,6 +10,8 @@ import net.runelite.api.Client;
 import net.runelite.api.MessageNode;
 import net.runelite.api.events.ChatMessage;
 
+import static net.runelite.api.ChatMessageType.GAMEMESSAGE;
+
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.ArrayList;
@@ -43,7 +45,11 @@ public class ChatCapture {
     }
 
     public void handleChatMessage(ChatMessage event) {
-        if (!config.translateChat()) return;
+        if (event.getType() == GAMEMESSAGE) {
+            if (!config.translateGameMessages()) return;
+        } else {
+            if (!config.translateChat()) return;
+        }
 
         String message = event.getMessage();
         if (message == null || message.isEmpty()) return;

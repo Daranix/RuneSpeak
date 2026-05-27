@@ -91,9 +91,13 @@ public class DialogCapture {
         // Both guards are needed: on each game tick the widget returns whatever text
         // is currently displayed, which may be the translation we already set.
         if (cleanText.equals(cleanOriginal) || (!cleanTranslation.isEmpty() && cleanText.equals(cleanTranslation))) {
-            // If "Show Original" was toggled on, restore the raw original text
+            // If "Show Original" was toggled ON and widget shows translated → restore original
             if (config.showOriginal() && !currentDialogOriginal.isEmpty() && !cleanText.equals(cleanOriginal)) {
                 dialogWidget.setText(currentDialogOriginal);
+            }
+            // If "Show Original" was toggled OFF and widget shows original → apply translation
+            if (!config.showOriginal() && !currentDialogTranslation.isEmpty() && cleanText.equals(cleanOriginal)) {
+                dialogWidget.setText(currentDialogTranslation);
             }
             return;
         }

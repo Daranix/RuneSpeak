@@ -14,12 +14,6 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.awt.*;
 
-/**
- * Translation overlay — kept in place for future use but currently
- * all in-game text is replaced directly inside the widgets by DialogCapture
- * and MenuCapture. The floating green text overlay has been removed to avoid
- * visual clutter and conflicts with the "Show Original" toggle.
- */
 @Slf4j
 @Singleton
 public class TranslationOverlay extends Overlay {
@@ -35,14 +29,43 @@ public class TranslationOverlay extends Overlay {
         this.config = config;
         this.dialogCapture = dialogCapture;
         this.translator = translator;
-        setPosition(OverlayPosition.DYNAMIC);
+        setPosition(OverlayPosition.TOP_LEFT);
         setLayer(OverlayLayer.ABOVE_WIDGETS);
         setPriority(OverlayPriority.HIGH);
     }
 
     @Override
     public Dimension render(Graphics2D graphics) {
-        // No floating overlay text — all translations are applied directly to widgets.
-        return null;
+        if (!config.showOriginal()) return null;
+
+        String original = dialogCapture.getCurrentDialogOriginal();
+        if (original == null || original.isEmpty()) return null;
+
+        String clean = stripTags(original);
+        if (clean.isEmpty()) return null;
+
+        FontMetrics fm = graphics.getFontMetrics();
+
+        String label = "Original: " + clean;
+        int textWidth = fm.stringWidth(label);
+        int textHeight = fm.getHeight();
+
+        int pad = 4;
+        int x = 5;
+        int y = 5 + textHeight;
+
+        graphics.setColor(new Color(0, 0, 0, 180));
+        graphics.fillRect(x - pad, y - textHeight - pad,
+                textWidth + pad * 2, textHeight + pad * 2);
+
+        graphics.setColor(Color.GREEN);
+        graphics.drawString(label, x, y);
+
+        return new Dimension(textWidth + pad * 2, textHeight + pad * 2);
+    }
+
+    private static String stripTags(String text) {
+        if (text == null) return "";
+        return text.replaceAll("<[^>]+>", "").trim();
     }
 }

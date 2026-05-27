@@ -175,6 +175,7 @@ public class RuneSpeakPlugin extends Plugin {
                 translator.getCache().clear();
                 dialogCapture.clear();
                 menuCapture.clear();
+                chatCapture.clear();
                 log.info("Translation cache and dialog state cleared for new language pair.");
 
                 if (source != target) {

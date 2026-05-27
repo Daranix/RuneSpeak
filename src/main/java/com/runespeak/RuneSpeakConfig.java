@@ -68,10 +68,21 @@ public interface RuneSpeakConfig extends Config {
     }
 
     @ConfigItem(
+            keyName = "translateGameMessages",
+            name = "Game Messages",
+            description = "Translate game messages (bottom-left text, tutorial instructions, system messages)",
+            position = 2,
+            section = SECTION_DISPLAY
+    )
+    default boolean translateGameMessages() {
+        return true;
+    }
+
+    @ConfigItem(
             keyName = "translateChat",
             name = "Chat Messages",
             description = "Translate player chat messages",
-            position = 2,
+            position = 3,
             section = SECTION_DISPLAY
     )
     default boolean translateChat() {
@@ -82,7 +93,7 @@ public interface RuneSpeakConfig extends Config {
             keyName = "translateOverhead",
             name = "Overhead Text",
             description = "Translate overhead text above NPCs/players",
-            position = 3,
+            position = 4,
             section = SECTION_DISPLAY
     )
     default boolean translateOverhead() {
@@ -93,7 +104,7 @@ public interface RuneSpeakConfig extends Config {
             keyName = "translateItemNames",
             name = "Item/NPC/Object Names",
             description = "Translate item, NPC, and object names",
-            position = 4,
+            position = 5,
             section = SECTION_DISPLAY
     )
     default boolean translateNames() {
@@ -104,7 +115,7 @@ public interface RuneSpeakConfig extends Config {
             keyName = "showOriginal",
             name = "Show Original Text",
             description = "Show original text alongside translation",
-            position = 5,
+            position = 6,
             section = SECTION_DISPLAY
     )
     default boolean showOriginal() {
@@ -115,7 +126,7 @@ public interface RuneSpeakConfig extends Config {
             keyName = "translationColor",
             name = "Translation Color",
             description = "Color of translated text overlay (hex, e.g. #00FF00)",
-            position = 6,
+            position = 7,
             section = SECTION_DISPLAY
     )
     default String getTranslationColor() {
