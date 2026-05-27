@@ -13,7 +13,10 @@ import net.runelite.api.events.ChatMessage;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Singleton
@@ -24,6 +27,13 @@ public class ChatCapture {
 
     @Getter
     private final List<TranslatedMessage> translatedMessages = new ArrayList<>();
+
+    /**
+     * MessageNode IDs that have already been translated.
+     * client.refreshChat() re-fires ChatMessage events for existing nodes —
+     * we track which node IDs we've already processed to avoid re-translating.
+     */
+    private final Set<Integer> translatedNodeIds = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     @Inject
     public ChatCapture(Client client, RuneSpeakConfig config, LocalTranslator translator) {
@@ -38,17 +48,26 @@ public class ChatCapture {
         String message = event.getMessage();
         if (message == null || message.isEmpty()) return;
 
+        MessageNode messageNode = event.getMessageNode();
+        if (messageNode == null) return;
+
+        // Guard: skip nodes we have already translated to prevent the loop where
+        // client.refreshChat() re-emits ChatMessage events for nodes we just modified.
+        int nodeId = messageNode.getId();
+        if (translatedNodeIds.contains(nodeId)) return;
+
         Language source = config.getSourceLanguage();
         Language target = config.getTargetLanguage();
         translator.setLanguages(source, target);
 
         translator.translateAsync(message).thenAccept(translated -> {
+            if (translated.startsWith("⏳")) return;
             if (!translated.equals(message)) {
-                MessageNode messageNode = event.getMessageNode();
-                if (messageNode != null) {
-                    messageNode.setRuneLiteFormatMessage(translated);
-                    client.refreshChat();
-                }
+                // Mark as translated BEFORE refreshChat() to block the re-fire
+                translatedNodeIds.add(nodeId);
+                messageNode.setRuneLiteFormatMessage(translated);
+                client.refreshChat();
+
                 synchronized (translatedMessages) {
                     translatedMessages.add(new TranslatedMessage(
                             event.getType(),
@@ -69,6 +88,7 @@ public class ChatCapture {
         synchronized (translatedMessages) {
             translatedMessages.clear();
         }
+        translatedNodeIds.clear();
     }
 
     @Getter

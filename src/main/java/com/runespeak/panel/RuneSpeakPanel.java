@@ -3,6 +3,7 @@ package com.runespeak.panel;
 import com.runespeak.Language;
 import com.runespeak.RuneSpeakConfig;
 import com.runespeak.capture.ChatCapture;
+import com.runespeak.capture.DialogCapture;
 import com.runespeak.translate.LocalTranslator;
 import lombok.extern.slf4j.Slf4j;
 
@@ -13,6 +14,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import net.runelite.client.config.ConfigManager;
@@ -26,6 +28,7 @@ public class RuneSpeakPanel extends PluginPanel {
     private final ConfigManager configManager;
     private final LocalTranslator translator;
     private final ChatCapture chatCapture;
+    private final DialogCapture dialogCapture;
 
     private JLabel statusLabel;
     private JLabel modelLabel;
@@ -35,11 +38,12 @@ public class RuneSpeakPanel extends PluginPanel {
     private Timer refreshTimer;
 
     @Inject
-    public RuneSpeakPanel(RuneSpeakConfig config, ConfigManager configManager, LocalTranslator translator, ChatCapture chatCapture) {
+    public RuneSpeakPanel(RuneSpeakConfig config, ConfigManager configManager, LocalTranslator translator, ChatCapture chatCapture, DialogCapture dialogCapture) {
         this.config = config;
         this.configManager = configManager;
         this.translator = translator;
         this.chatCapture = chatCapture;
+        this.dialogCapture = dialogCapture;
         initComponents();
         startRefreshTimer();
     }
@@ -175,6 +179,7 @@ public class RuneSpeakPanel extends PluginPanel {
         clearLogBtn.addActionListener(e -> {
             translationLog.setText("");
             chatCapture.clear();
+            dialogCapture.clear();
         });
         bottomPanel.add(clearLogBtn);
         bottomPanel.add(Box.createRigidArea(new Dimension(0, 5)));
@@ -245,20 +250,31 @@ public class RuneSpeakPanel extends PluginPanel {
         cacheCountLabel.setText("Cache: " + translator.getCache().size()
                 + " / " + translator.getCache().getMaxSize() + " entries");
 
+        // Merge chat translations and dialog translations into one unified log
+        List<String> logLines = new ArrayList<>();
+
+        List<DialogCapture.DialogLogEntry> dialogEntries = new ArrayList<>(dialogCapture.getDialogLog());
+        int dlgStart = Math.max(0, dialogEntries.size() - 10);
+        for (DialogCapture.DialogLogEntry e : dialogEntries.subList(dlgStart, dialogEntries.size())) {
+            logLines.add(String.format("[NPC] %s\n  \u2192 %s",
+                    truncate(e.getOriginal(), 40),
+                    truncate(e.getTranslation(), 40)));
+        }
+
         List<ChatCapture.TranslatedMessage> messages;
         synchronized (chatCapture.getTranslatedMessages()) {
             messages = List.copyOf(chatCapture.getTranslatedMessages());
         }
+        int chatStart = Math.max(0, messages.size() - 10);
+        for (ChatCapture.TranslatedMessage msg : messages.subList(chatStart, messages.size())) {
+            logLines.add(String.format("[%s] %s\n  \u2192 %s",
+                    msg.getSender(),
+                    truncate(msg.getOriginal(), 40),
+                    truncate(msg.getTranslation(), 40)));
+        }
 
-        if (!messages.isEmpty()) {
-            int start = Math.max(0, messages.size() - 10);
-            String logText = messages.subList(start, messages.size()).stream()
-                    .map(msg -> String.format("[%s] %s\n  \u2192 %s",
-                             msg.getSender(),
-                             truncate(msg.getOriginal(), 40),
-                             truncate(msg.getTranslation(), 40)))
-                    .collect(Collectors.joining("\n---\n"));
-            translationLog.setText(logText);
+        if (!logLines.isEmpty()) {
+            translationLog.setText(String.join("\n---\n", logLines));
         }
     }
 

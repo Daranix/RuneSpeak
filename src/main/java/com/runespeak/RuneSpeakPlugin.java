@@ -159,6 +159,13 @@ public class RuneSpeakPlugin extends Plugin {
                 Language target = config.getTargetLanguage();
                 translator.setLanguages(source, target);
                 log.info("Languages updated: {} → {}", source.getDisplayName(), target.getDisplayName());
+
+                // Clear stale translations for the old language pair
+                translator.getCache().clear();
+                dialogCapture.clear();
+                menuCapture.clear();
+                log.info("Translation cache and dialog state cleared for new language pair.");
+
                 if (source != target) {
                     String modelId = "onnx-community/opus-mt-" + source.getTwoLetterCode() + "-" + target.getTwoLetterCode();
                     translator.initialize(modelId);
