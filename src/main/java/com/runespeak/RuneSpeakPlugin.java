@@ -13,6 +13,7 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.events.MenuOpened;
 import net.runelite.api.events.OverheadTextChanged;
 import net.runelite.client.config.ConfigManager;
@@ -117,6 +118,16 @@ public class RuneSpeakPlugin extends Plugin {
 
         if (config.translateNpcDialogue()) {
             dialogCapture.checkAndTranslateDialog();
+        }
+    }
+
+    @Subscribe
+    public void onMenuEntryAdded(MenuEntryAdded event) {
+        // Fires on hover (before right-click) — apply cached translations so the
+        // hover tooltip shows translated text without needing a full right-click.
+        if (client.getGameState() != GameState.LOGGED_IN) return;
+        if (config.translateMenuEntries()) {
+            menuCapture.handleMenuEntryAdded(event);
         }
     }
 

@@ -36,8 +36,8 @@ public class DialogCapture {
     @Getter
     private final List<DialogLogEntry> dialogLog = new CopyOnWriteArrayList<>();
 
-    /** Tracks which option widget IDs have already been translated to avoid re-translation. */
-    private final ConcurrentHashMap<Integer, String> translatedOptions = new ConcurrentHashMap<>();
+    /** Tracks original clean text → translation for conversation option widgets. */
+    private final ConcurrentHashMap<String, String> optionTranslations = new ConcurrentHashMap<>();
 
     @Inject
     public DialogCapture(Client client, RuneSpeakConfig config, LocalTranslator translator) {
@@ -64,15 +64,17 @@ public class DialogCapture {
 
         if (activeDialog != null) {
             translateMainDialog(activeDialog);
-            translateDialogOptions();
         } else {
             if (dialogActive) {
                 dialogActive = false;
                 currentDialogTranslation = "";
                 currentDialogOriginal = "";
-                translatedOptions.clear();
             }
         }
+
+        // Dialog options ("Select an Option" box) use a SEPARATE interface (219) that is
+        // shown INSTEAD of the NPC text widget — it must be checked unconditionally.
+        translateDialogOptions();
     }
 
     private void translateMainDialog(Widget dialogWidget) {
@@ -124,12 +126,23 @@ public class DialogCapture {
     }
 
     private void translateDialogOptions() {
-        // Dialog option list (NPC conversation choices): component 1 inside the options group
+        // The "Select an Option" conversation choices live inside interface 219.
+        // Component 1 holds the scrollable list; its dynamic children are the individual options.
         Widget optionGroup = client.getWidget(DIALOG_OPTION_WIDGET_ID, 1);
-        if (optionGroup == null || optionGroup.isHidden()) return;
+        if (optionGroup == null || optionGroup.isHidden()) {
+            // Option dialog went away — clear per-widget translation cache
+            if (!optionTranslations.isEmpty()) {
+                optionTranslations.clear();
+            }
+            return;
+        }
 
+        // Try dynamic children first; fall back to static children (depends on OSRS version)
         Widget[] children = optionGroup.getDynamicChildren();
-        if (children == null) return;
+        if (children == null || children.length == 0) {
+            children = optionGroup.getStaticChildren();
+        }
+        if (children == null || children.length == 0) return;
 
         Language source = config.getSourceLanguage();
         Language target = config.getTargetLanguage();
@@ -143,30 +156,39 @@ public class DialogCapture {
             String clean = stripTags(optText);
             if (clean.isEmpty()) continue;
 
-            // Already translated this exact widget content
-            String alreadyTranslated = translatedOptions.get(option.getId());
-            if (clean.equals(alreadyTranslated)) continue;
-
-            // Check cache first
-            String cached = translator.getCache().get(clean, srcCode, tgtCode);
-            if (cached != null && !cached.equals(clean)) {
-                option.setText(cached);
-                translatedOptions.put(option.getId(), cached);
+            // If the current text IS a known translation, skip it — we already applied it.
+            // This prevents re-translation when the game resets the widget text.
+            String knownTranslation = optionTranslations.get(clean);
+            if (knownTranslation != null) {
+                // Re-apply the translation every tick in case the game reset the widget
+                if (!clean.equals(knownTranslation)) {
+                    option.setText(knownTranslation);
+                }
                 continue;
             }
 
-            // Async translate
+            // Guard: if this text is already a translation value (i.e. some other option's
+            // original maps to this text), skip — we don't want to translate a translation.
+            if (optionTranslations.containsValue(clean)) continue;
+
+            // Check cache first for an immediate synchronous update
+            String cached = translator.getCache().get(clean, srcCode, tgtCode);
+            if (cached != null && !cached.equals(clean)) {
+                optionTranslations.put(clean, cached);
+                option.setText(cached);
+                continue;
+            }
+
+            // Mark as "pending" with a self-mapping to prevent duplicate async requests
+            optionTranslations.put(clean, clean);
+
             final Widget capturedOption = option;
-            final String capturedText   = optText;
             final String capturedClean  = clean;
             translator.translateAsync(clean).thenAccept(translated -> {
-                if (!translated.startsWith("⏳") && !translated.equals(capturedClean)) {
-                    // Make sure the widget still has the original text before overwriting
-                    if (capturedText.equals(capturedOption.getText())) {
-                        capturedOption.setText(translated);
-                    }
-                    translatedOptions.put(capturedOption.getId(), translated);
+                if (!translated.startsWith("\u23F3") && !translated.equals(capturedClean)) {
+                    optionTranslations.put(capturedClean, translated);
                     translator.getCache().put(capturedClean, translated, srcCode, tgtCode);
+                    capturedOption.setText(translated);
                 }
             });
         }
@@ -188,7 +210,7 @@ public class DialogCapture {
         dialogActive = false;
         currentDialogTranslation = "";
         currentDialogOriginal = "";
-        translatedOptions.clear();
+        optionTranslations.clear();
         dialogLog.clear();
     }
 
