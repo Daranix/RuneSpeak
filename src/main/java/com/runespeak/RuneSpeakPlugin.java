@@ -159,6 +159,10 @@ public class RuneSpeakPlugin extends Plugin {
                 Language target = config.getTargetLanguage();
                 translator.setLanguages(source, target);
                 log.info("Languages updated: {} → {}", source.getDisplayName(), target.getDisplayName());
+                if (source != target) {
+                    String modelId = "onnx-community/opus-mt-" + source.getTwoLetterCode() + "-" + target.getTwoLetterCode();
+                    translator.initialize(modelId);
+                }
                 break;
             }
         }
@@ -173,15 +177,16 @@ public class RuneSpeakPlugin extends Plugin {
             "Helsinki-NLP/opus-mt-en-de"
     );
 
-    private static final String DEFAULT_MODEL = "Xenova/opus-mt-en-es";
+    private static final String DEFAULT_MODEL = "onnx-community/opus-mt-en-es";
 
     private void startModelLoading() {
-        String modelId = configManager.getConfiguration("runespeak", "modelId");
-        if (modelId == null || modelId.isBlank() || OBSOLETE_MODELS.contains(modelId)) {
-            modelId = DEFAULT_MODEL;
+        Language source = config.getSourceLanguage();
+        Language target = config.getTargetLanguage();
+        if (source != target) {
+            String modelId = "onnx-community/opus-mt-" + source.getTwoLetterCode() + "-" + target.getTwoLetterCode();
+            log.info("startModelLoading: Loading model: {}", modelId);
+            translator.initialize(modelId);
         }
-        log.info("startModelLoading: Loading model: {}", modelId);
-        translator.initialize(modelId);
         log.info("startModelLoading: Initialization submitted to executor");
     }
 

@@ -2,7 +2,7 @@ package com.runespeak.translate;
 
 import com.runespeak.Language;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.client.config.ConfigManager;
+import com.runespeak.RuneSpeakConfig;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -18,14 +18,14 @@ public class LocalTranslator {
     private final OnnxTranslationEngine engine;
     private final TranslationCache cache;
     private final ExecutorService executor;
-    private final ConfigManager configManager;
+    private final RuneSpeakConfig config;
 
     private Language currentSource = Language.ENGLISH;
     private Language currentTarget = Language.SPANISH;
 
     @Inject
-    public LocalTranslator(ConfigManager configManager) {
-        this.configManager = configManager;
+    public LocalTranslator(RuneSpeakConfig config) {
+        this.config = config;
 
         Path baseDir = resolveCacheDir();
 
@@ -39,6 +39,8 @@ public class LocalTranslator {
     }
 
     public void initialize(String modelId) {
+        Path baseDir = resolveCacheDir();
+        engine.setBaseDir(baseDir);
 
         executor.submit(() -> {
             log.info("Translator executor started for model: {}", modelId);
@@ -59,8 +61,7 @@ public class LocalTranslator {
     }
 
     private int getCacheMaxSize() {
-        String val = configManager.getConfiguration("runespeak", "cacheSize");
-        return val != null ? Integer.parseInt(val) : 5000;
+        return config.getCacheSize();
     }
 
     public void setLanguages(Language source, Language target) {
@@ -169,11 +170,11 @@ public class LocalTranslator {
     }
 
     private Path resolveCacheDir() {
-        String custom = configManager.getConfiguration("runespeak", "modelCacheDir");
+        String custom = config.getModelCacheDir();
         if (custom != null && !custom.isBlank()) {
             return Path.of(custom);
         }
-        return Path.of(System.getProperty("user.home"), ".runespeak");
+        return new java.io.File(net.runelite.client.RuneLite.RUNELITE_DIR, "runespeak").toPath();
     }
 
     private static String truncate(String text, int max) {

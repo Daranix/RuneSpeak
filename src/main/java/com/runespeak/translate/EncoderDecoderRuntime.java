@@ -16,7 +16,6 @@ import java.util.concurrent.CompletableFuture;
 public class EncoderDecoderRuntime implements ModelRuntime {
 
     private final String modelId;
-    private final ModelStrategy strategy;
 
     @Getter
     private volatile boolean loaded = false;
@@ -36,7 +35,6 @@ public class EncoderDecoderRuntime implements ModelRuntime {
 
     public EncoderDecoderRuntime(String modelId) {
         this.modelId = modelId;
-        this.strategy = ModelStrategy.forModelId(modelId);
     }
 
     @Override
@@ -46,7 +44,12 @@ public class EncoderDecoderRuntime implements ModelRuntime {
 
     @Override
     public List<DownloadFile> getRequiredFiles() {
-        return strategy.getRequiredFiles(modelId);
+        return List.of(
+                new DownloadFile("onnx", "encoder_model.onnx"),
+                new DownloadFile("onnx", "decoder_model.onnx"),
+                new DownloadFile("", "tokenizer.json"),
+                new DownloadFile("", "config.json")
+        );
     }
 
     @Override
@@ -83,9 +86,9 @@ public class EncoderDecoderRuntime implements ModelRuntime {
                     threads, gpuEnabled ? " + GPU" : "");
 
             encoderSession = ortEnv.createSession(
-                    modelPath.resolve(strategy.getEncoderFilename(modelId)).toString(), opts);
+                    modelPath.resolve("encoder_model.onnx").toString(), opts);
             decoderSession = ortEnv.createSession(
-                    modelPath.resolve(strategy.getDecoderFilename(modelId)).toString(), opts);
+                    modelPath.resolve("decoder_model.onnx").toString(), opts);
 
             log.info("Encoder Inputs: {}", encoderSession.getInputNames());
             log.info("Encoder Outputs: {}", encoderSession.getOutputNames());
@@ -93,7 +96,7 @@ public class EncoderDecoderRuntime implements ModelRuntime {
             log.info("Decoder Outputs: {}", decoderSession.getOutputNames());
 
             Map<String, String> tokOpts = new HashMap<>();
-            tokOpts.put("addSpecialTokens", String.valueOf(strategy.getPromptStrategy(modelId).addSpecialTokens()));
+            tokOpts.put("addSpecialTokens", "true");
             tokenizer = HuggingFaceTokenizer.newInstance(
                     modelPath.resolve("tokenizer.json"), tokOpts);
 
@@ -141,7 +144,7 @@ public class EncoderDecoderRuntime implements ModelRuntime {
     }
 
     private String translateSync(String text, String srcLang, String tgtLang) throws Exception {
-        String inputText = strategy.getPromptStrategy(modelId).format(text, srcLang, tgtLang);
+        String inputText = text;
 
         Encoding encoding = tokenizer.encode(inputText);
         long[] inputIds = encoding.getIds();
@@ -149,14 +152,9 @@ public class EncoderDecoderRuntime implements ModelRuntime {
 
         if (inputIds.length == 0) return text;
 
-        int actualDecoderStart = strategy.getPromptStrategy(modelId).overrideDecoderStartTokenId(tgtLang, decoderStartTokenId, tokenizer);
+        int actualDecoderStart = decoderStartTokenId;
         List<Long> outputTokenIds = new ArrayList<>();
         outputTokenIds.add((long) actualDecoderStart);
-
-        int forcedBos = strategy.getPromptStrategy(modelId).overrideForcedBosTokenId(tgtLang, tokenizer);
-        if (forcedBos >= 0) {
-            outputTokenIds.add((long) forcedBos);
-        }
 
         try (OnnxTensor inputTensor = OnnxTensor.createTensor(ortEnv, new long[][]{inputIds});
              OnnxTensor maskTensor = OnnxTensor.createTensor(ortEnv, new long[][]{attentionMask});

@@ -26,9 +26,13 @@ public class OnnxTranslationEngine {
 
     private ModelRuntime runtime;
     private OrtEnvironment ortEnv;
-    private final Path modelsDir;
+    private Path modelsDir;
 
     public OnnxTranslationEngine(Path runespeakDir) {
+        this.modelsDir = runespeakDir.resolve("models");
+    }
+
+    public synchronized void setBaseDir(Path runespeakDir) {
         this.modelsDir = runespeakDir.resolve("models");
     }
 
@@ -61,6 +65,9 @@ public class OnnxTranslationEngine {
                 downloadIfMissing(modelId, modelPath, file);
             }
 
+            Path tokenizerPath = modelPath.resolve("tokenizer.json");
+            sanitizeTokenizerJson(tokenizerPath);
+
             log.info("Creating OrtEnvironment");
             ortEnv = OrtEnvironment.getEnvironment();
             log.info("OrtEnvironment created: {}", ortEnv);
@@ -80,6 +87,67 @@ public class OnnxTranslationEngine {
         } finally {
             loading = false;
             log.info("Set loading=false for model {}", modelId);
+        }
+    }
+
+    private void sanitizeTokenizerJson(Path tokenizerPath) {
+        if (!Files.exists(tokenizerPath)) {
+            return;
+        }
+        try {
+            log.info("Sanitizing tokenizer.json at {}", tokenizerPath);
+            byte[] bytes = Files.readAllBytes(tokenizerPath);
+            String content = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+            if (!content.contains("\"Precompiled\"")) {
+                return;
+            }
+
+            com.google.gson.Gson gson = new com.google.gson.Gson();
+            com.google.gson.JsonObject json = gson.fromJson(content, com.google.gson.JsonObject.class);
+            boolean modified = false;
+
+            if (json.has("normalizer")) {
+                com.google.gson.JsonElement normalizerElement = json.get("normalizer");
+                if (normalizerElement.isJsonObject()) {
+                    com.google.gson.JsonObject normalizer = normalizerElement.getAsJsonObject();
+                    if (normalizer.has("normalizers") && normalizer.get("normalizers").isJsonArray()) {
+                        com.google.gson.JsonArray normalizers = normalizer.getAsJsonArray("normalizers");
+                        com.google.gson.JsonArray newNormalizers = new com.google.gson.JsonArray();
+                        for (com.google.gson.JsonElement normElem : normalizers) {
+                            if (normElem.isJsonObject()) {
+                                com.google.gson.JsonObject normObj = normElem.getAsJsonObject();
+                                if (normObj.has("type") && "Precompiled".equals(normObj.get("type").getAsString())) {
+                                    if (!normObj.has("precompiled_charsmap") || normObj.get("precompiled_charsmap").isJsonNull()) {
+                                        log.info("Removing Precompiled normalizer with null precompiled_charsmap");
+                                        modified = true;
+                                        continue;
+                                    }
+                                }
+                            }
+                            newNormalizers.add(normElem);
+                        }
+                        if (modified) {
+                            normalizer.add("normalizers", newNormalizers);
+                        }
+                    } else if (normalizer.has("type") && "Precompiled".equals(normalizer.get("type").getAsString())) {
+                        if (!normalizer.has("precompiled_charsmap") || normalizer.get("precompiled_charsmap").isJsonNull()) {
+                            log.info("Removing root Precompiled normalizer with null precompiled_charsmap");
+                            json.remove("normalizer");
+                            modified = true;
+                        }
+                    }
+                }
+            }
+
+            if (modified) {
+                String sanitized = gson.toJson(json);
+                Files.write(tokenizerPath, sanitized.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                log.info("Successfully sanitized tokenizer.json");
+            } else {
+                log.info("No modifications needed for tokenizer.json");
+            }
+        } catch (Exception e) {
+            log.error("Failed to sanitize tokenizer.json: {}", e.getMessage(), e);
         }
     }
 

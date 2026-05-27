@@ -51,4 +51,38 @@ public enum Language {
     public String getFloresCode() {
         return floresCode;
     }
+
+    public String getTwoLetterCode() {
+        switch (this) {
+            case ENGLISH: return "en";
+            case SPANISH: return "es";
+            case FRENCH: return "fr";
+            case GERMAN: return "de";
+            case ITALIAN: return "it";
+            case PORTUGUESE: return "pt";
+            case DUTCH: return "nl";
+            case POLISH: return "pl";
+            case ROMANIAN: return "ro";
+            case RUSSIAN: return "ru";
+            case JAPANESE: return "ja";
+            case KOREAN: return "ko";
+            case CHINESE_SIMPLIFIED:
+            case CHINESE_TRADITIONAL: return "zh";
+            case ARABIC: return "ar";
+            case HINDI: return "hi";
+            case TURKISH: return "tr";
+            case VIETNAMESE: return "vi";
+            case THAI: return "th";
+            case INDONESIAN: return "id";
+            case SWEDISH: return "sv";
+            case NORWEGIAN: return "no";
+            case DANISH: return "da";
+            case FINNISH: return "fi";
+            case GREEK: return "el";
+            case CZECH: return "cs";
+            case HUNGARIAN: return "hu";
+            case UKRAINIAN: return "uk";
+            default: return "en";
+        }
+    }
 }

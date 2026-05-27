@@ -12,11 +12,12 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
-import java.nio.file.Path;
+import java.io.File;
 import java.util.List;
 import java.util.stream.Collectors;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.PluginPanel;
+import net.runelite.client.ui.ColorScheme;
 
 @Slf4j
 @Singleton
@@ -30,22 +31,8 @@ public class RuneSpeakPanel extends PluginPanel {
     private JLabel modelLabel;
     private JLabel cacheCountLabel;
     private JTextArea translationLog;
-    private Timer refreshTimer;
-
-    private static final String[] MODEL_PRESETS = {
-            "Xenova/opus-mt-en-es",
-            "onnx-community/Qwen2.5-0.5B-Instruct-ONNX",
-            "onnx-community/Llama-3.2-1B-Instruct-ONNX",
-            "onnx-community/t5-small-ONNX",
-            "echarlaix/t5-small-onnx",
-    };
-
-    private JComboBox<Language> sourceCombo;
-    private JComboBox<Language> targetCombo;
-    private JComboBox<String> modelCombo;
-    private JSpinner cacheSizeSpinner;
     private JTextField cacheDirField;
-    private JButton applyButton;
+    private Timer refreshTimer;
 
     @Inject
     public RuneSpeakPanel(RuneSpeakConfig config, ConfigManager configManager, LocalTranslator translator, ChatCapture chatCapture) {
@@ -58,216 +45,162 @@ public class RuneSpeakPanel extends PluginPanel {
     }
 
     private void initComponents() {
-        setLayout(new BorderLayout());
-        setBorder(new EmptyBorder(8, 8, 8, 8));
+        setLayout(new BorderLayout(0, 10));
+        setBorder(new EmptyBorder(10, 10, 10, 10));
+        setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        JPanel scrollContent = new JPanel();
-        scrollContent.setLayout(new BoxLayout(scrollContent, BoxLayout.Y_AXIS));
-        addHeader(scrollContent);
-        addSettingsSection(scrollContent);
-        addLogSection(scrollContent);
+        // Top panel containing Header and Cache Settings
+        JPanel topContainer = new JPanel();
+        topContainer.setLayout(new BoxLayout(topContainer, BoxLayout.Y_AXIS));
+        topContainer.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        JScrollPane scrollPane = new JScrollPane(scrollContent);
-        scrollPane.setBorder(null);
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-        add(scrollPane, BorderLayout.CENTER);
-
-        addButtonPanel();
-    }
-
-    private void addHeader(JPanel parent) {
-        JPanel header = new JPanel(new GridBagLayout());
-        header.setBorder(new EmptyBorder(0, 0, 8, 0));
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.gridwidth = GridBagConstraints.REMAINDER;
-        gbc.weightx = 1.0;
-        gbc.insets = new Insets(1, 0, 1, 0);
+        // Top Header Info
+        JPanel headerPanel = new JPanel();
+        headerPanel.setLayout(new BoxLayout(headerPanel, BoxLayout.Y_AXIS));
+        headerPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        headerPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JLabel title = new JLabel("RuneSpeak");
         title.setFont(new Font("Dialog", Font.BOLD, 18));
-        header.add(title, gbc);
+        title.setForeground(Color.WHITE);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        headerPanel.add(title);
+        headerPanel.add(Box.createRigidArea(new Dimension(0, 5)));
 
         statusLabel = new JLabel("Status: Initializing...");
         statusLabel.setFont(new Font("Dialog", Font.PLAIN, 12));
-        header.add(statusLabel, gbc);
+        statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        headerPanel.add(statusLabel);
+        headerPanel.add(Box.createRigidArea(new Dimension(0, 3)));
 
-        modelLabel = new JLabel("Model: " + readModelId());
-        modelLabel.setFont(new Font("Dialog", Font.PLAIN, 10));
-        header.add(modelLabel, gbc);
+        modelLabel = new JLabel("Model: N/A");
+        modelLabel.setFont(new Font("Dialog", Font.PLAIN, 11));
+        modelLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        modelLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        headerPanel.add(modelLabel);
+        headerPanel.add(Box.createRigidArea(new Dimension(0, 3)));
 
         cacheCountLabel = new JLabel("Cache: 0 entries");
-        cacheCountLabel.setFont(new Font("Dialog", Font.PLAIN, 10));
-        header.add(cacheCountLabel, gbc);
+        cacheCountLabel.setFont(new Font("Dialog", Font.PLAIN, 11));
+        cacheCountLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        cacheCountLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        headerPanel.add(cacheCountLabel);
 
-        parent.add(header);
-    }
+        topContainer.add(headerPanel);
+        topContainer.add(Box.createRigidArea(new Dimension(0, 10)));
 
-    private void addSettingsSection(JPanel parent) {
-        JPanel section = new JPanel(new GridBagLayout());
-        section.setBorder(new TitledBorder("Translation Settings"));
+        // Cache Directory Settings Panel
+        JPanel settingsPanel = new JPanel(new GridBagLayout());
+        settingsPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        settingsPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(ColorScheme.DARKER_GRAY_COLOR),
+                "Cache Directory",
+                TitledBorder.DEFAULT_JUSTIFICATION,
+                TitledBorder.DEFAULT_POSITION,
+                new Font("Dialog", Font.BOLD, 11),
+                Color.WHITE
+        ));
+        settingsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weightx = 1.0;
-        gbc.insets = new Insets(3, 6, 3, 6);
+        gbc.insets = new Insets(3, 3, 3, 3);
         gbc.gridwidth = GridBagConstraints.REMAINDER;
 
-        Language[] languages = Language.values();
-
-        JPanel langRow = new JPanel(new GridBagLayout());
-        GridBagConstraints lc = new GridBagConstraints();
-        lc.anchor = GridBagConstraints.WEST;
-        lc.insets = new Insets(0, 0, 0, 2);
-
-        lc.gridx = 0; lc.weightx = 0; lc.fill = GridBagConstraints.NONE;
-        langRow.add(new JLabel("From:"), lc);
-
-        sourceCombo = new JComboBox<>(languages);
-        sourceCombo.setSelectedItem(config.getSourceLanguage());
-        lc.gridx = 1; lc.weightx = 0.5; lc.fill = GridBagConstraints.HORIZONTAL;
-        langRow.add(sourceCombo, lc);
-
-        lc.gridx = 2; lc.weightx = 0; lc.fill = GridBagConstraints.NONE;
-        langRow.add(new JLabel("\u00a0To:"), lc);
-
-        targetCombo = new JComboBox<>(languages);
-        targetCombo.setSelectedItem(config.getTargetLanguage());
-        lc.gridx = 3; lc.weightx = 0.5; lc.fill = GridBagConstraints.HORIZONTAL;
-        langRow.add(targetCombo, lc);
-
-        section.add(langRow, gbc);
-
-        JPanel modelRow = new JPanel(new GridBagLayout());
-        GridBagConstraints mc = new GridBagConstraints();
-        mc.anchor = GridBagConstraints.WEST;
-        mc.insets = new Insets(0, 0, 0, 2);
-
-        mc.gridx = 0; mc.weightx = 0; mc.fill = GridBagConstraints.NONE;
-        modelRow.add(new JLabel("Model:"), mc);
-
-        modelCombo = new JComboBox<>(MODEL_PRESETS);
-        modelCombo.setEditable(true);
-        String currentModel = readModelId();
-        boolean found = false;
-        for (int i = 0; i < MODEL_PRESETS.length; i++) {
-            if (MODEL_PRESETS[i].equals(currentModel)) {
-                modelCombo.setSelectedIndex(i);
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            modelCombo.setSelectedItem(currentModel);
-        }
-        mc.gridx = 1; mc.weightx = 1.0; mc.fill = GridBagConstraints.HORIZONTAL;
-        modelRow.add(modelCombo, mc);
-        section.add(modelRow, gbc);
-
-        JPanel cacheRow = new JPanel(new GridBagLayout());
-        GridBagConstraints cc = new GridBagConstraints();
-        cc.anchor = GridBagConstraints.WEST;
-        cc.insets = new Insets(0, 0, 0, 2);
-
-        cc.gridx = 0; cc.weightx = 0; cc.fill = GridBagConstraints.NONE;
-        cacheRow.add(new JLabel("Max cache:"), cc);
-
-        cacheSizeSpinner = new JSpinner(new SpinnerNumberModel(readCacheSize(), 100, 100_000, 500));
-        cc.gridx = 1; cc.weightx = 0; cc.fill = GridBagConstraints.HORIZONTAL;
-        cacheRow.add(cacheSizeSpinner, cc);
-
-        cc.gridx = 2; cc.weightx = 1.0; cc.fill = GridBagConstraints.NONE;
-        cacheRow.add(new JLabel(" entries"), cc);
-        section.add(cacheRow, gbc);
-
-        JPanel dirLabelRow = new JPanel(new GridBagLayout());
-        GridBagConstraints dc = new GridBagConstraints();
-        dc.anchor = GridBagConstraints.WEST;
-        dirLabelRow.add(new JLabel("Cache dir:"), dc);
-        section.add(dirLabelRow, gbc);
-
-        JPanel dirRow = new JPanel(new GridBagLayout());
-        GridBagConstraints dirc = new GridBagConstraints();
-        dirc.insets = new Insets(0, 0, 0, 2);
-
-        cacheDirField = new JTextField();
-        String savedDir = configManager.getConfiguration("runespeak", "modelCacheDir");
+        cacheDirField = new JTextField(12);
+        cacheDirField.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        cacheDirField.setForeground(Color.LIGHT_GRAY);
+        cacheDirField.setCaretColor(Color.WHITE);
+        
+        String savedDir = config.getModelCacheDir();
         if (savedDir != null && !savedDir.isBlank()) {
-            cacheDirField.setText(Path.of(savedDir).toAbsolutePath().toString());
+            cacheDirField.setText(savedDir);
         } else {
             cacheDirField.setText(translator.getCacheDir().toAbsolutePath().toString());
         }
-        dirc.gridx = 0; dirc.weightx = 1.0; dirc.fill = GridBagConstraints.HORIZONTAL;
-        dirRow.add(cacheDirField, dirc);
+        settingsPanel.add(cacheDirField, gbc);
+
+        JPanel dirButtons = new JPanel(new GridLayout(1, 2, 5, 0));
+        dirButtons.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
         JButton browseButton = new JButton("Browse...");
+        browseButton.setFont(new Font("Dialog", Font.PLAIN, 11));
         browseButton.addActionListener(e -> chooseCacheDir());
-        dirc.gridx = 1; dirc.weightx = 0; dirc.fill = GridBagConstraints.NONE;
-        dirRow.add(browseButton, dirc);
-        section.add(dirRow, gbc);
+        dirButtons.add(browseButton);
 
-        JPanel applyRow = new JPanel(new GridBagLayout());
-        GridBagConstraints ac = new GridBagConstraints();
-        ac.anchor = GridBagConstraints.WEST;
-        ac.insets = new Insets(0, 0, 0, 4);
+        JButton applyDirBtn = new JButton("Apply");
+        applyDirBtn.setFont(new Font("Dialog", Font.PLAIN, 11));
+        applyDirBtn.addActionListener(e -> applyCacheDir());
+        dirButtons.add(applyDirBtn);
 
-        applyButton = new JButton("Apply Settings");
-        applyButton.addActionListener(e -> applySettings());
-        ac.gridx = 0;
-        applyRow.add(applyButton, ac);
+        settingsPanel.add(dirButtons, gbc);
+        topContainer.add(settingsPanel);
 
-        JButton refreshCacheBtn = new JButton("Clear Cache");
-            refreshCacheBtn.setToolTipText("Remove all cached translations");
-            refreshCacheBtn.addActionListener(e -> {
-            translator.getCache().clear();
-            refreshStatus();
-        });
-        ac.gridx = 1; ac.insets = new Insets(0, 0, 0, 0);
-        applyRow.add(refreshCacheBtn, ac);
+        add(topContainer, BorderLayout.NORTH);
 
-        section.add(applyRow, gbc);
-        parent.add(section);
-    }
-
-    private void addLogSection(JPanel parent) {
-        JPanel section = new JPanel(new BorderLayout());
-        section.setBorder(new TitledBorder("Translation Log"));
+        // Center Log Panel
+        JPanel centerPanel = new JPanel(new BorderLayout(0, 5));
+        centerPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        
+        JLabel logTitle = new JLabel("Translation Log");
+        logTitle.setFont(new Font("Dialog", Font.BOLD, 12));
+        logTitle.setForeground(Color.WHITE);
+        centerPanel.add(logTitle, BorderLayout.NORTH);
 
         translationLog = new JTextArea();
         translationLog.setEditable(false);
         translationLog.setFont(new Font("Monospaced", Font.PLAIN, 11));
         translationLog.setLineWrap(true);
         translationLog.setWrapStyleWord(true);
+        translationLog.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        translationLog.setForeground(Color.LIGHT_GRAY);
+
         JScrollPane scrollPane = new JScrollPane(translationLog);
-        scrollPane.setPreferredSize(new Dimension(0, 200));
-        section.add(scrollPane, BorderLayout.CENTER);
+        scrollPane.setBorder(BorderFactory.createLineBorder(ColorScheme.DARKER_GRAY_COLOR));
+        scrollPane.getVerticalScrollBar().setUnitIncrement(12);
+        centerPanel.add(scrollPane, BorderLayout.CENTER);
 
-        parent.add(section);
-    }
+        add(centerPanel, BorderLayout.CENTER);
 
-    private void addButtonPanel() {
-        JPanel buttonPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints bc = new GridBagConstraints();
-        bc.anchor = GridBagConstraints.WEST;
-        bc.insets = new Insets(0, 0, 0, 4);
+        // Bottom Actions Panel (Stacked vertically)
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
+        bottomPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        JButton clearButton = new JButton("Clear Log");
-        clearButton.addActionListener(e -> {
+        JButton clearLogBtn = new JButton("Clear Log");
+        clearLogBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        clearLogBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        clearLogBtn.addActionListener(e -> {
             translationLog.setText("");
             chatCapture.clear();
         });
-        bc.gridx = 0;
-        buttonPanel.add(clearButton, bc);
+        bottomPanel.add(clearLogBtn);
+        bottomPanel.add(Box.createRigidArea(new Dimension(0, 5)));
 
-        JButton reloadButton = new JButton("Reload Model");
-        reloadButton.addActionListener(e -> {
-            reloadButton.setEnabled(false);
+        JButton clearCacheBtn = new JButton("Clear Cache");
+        clearCacheBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        clearCacheBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        clearCacheBtn.addActionListener(e -> {
+            translator.getCache().clear();
+            refreshStatus();
+        });
+        bottomPanel.add(clearCacheBtn);
+        bottomPanel.add(Box.createRigidArea(new Dimension(0, 5)));
+
+        JButton reloadBtn = new JButton("Reload Model");
+        reloadBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        reloadBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        reloadBtn.addActionListener(e -> {
+            reloadBtn.setEnabled(false);
             statusLabel.setText("Status: Loading model...");
             translator.initialize(readModelId());
+            reloadBtn.setEnabled(true);
         });
-        bc.gridx = 1; bc.insets = new Insets(0, 0, 0, 0);
-        buttonPanel.add(reloadButton, bc);
+        bottomPanel.add(reloadBtn);
 
-        add(buttonPanel, BorderLayout.SOUTH);
+        add(bottomPanel, BorderLayout.SOUTH);
     }
 
     private void chooseCacheDir() {
@@ -276,7 +209,7 @@ public class RuneSpeakPanel extends PluginPanel {
         chooser.setDialogTitle("Select Cache Directory");
         String current = cacheDirField.getText().trim();
         if (!current.isEmpty()) {
-            chooser.setCurrentDirectory(new java.io.File(current));
+            chooser.setCurrentDirectory(new File(current));
         }
         int result = chooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
@@ -284,35 +217,14 @@ public class RuneSpeakPanel extends PluginPanel {
         }
     }
 
-    private void applySettings() {
-        Language src = (Language) sourceCombo.getSelectedItem();
-        Language tgt = (Language) targetCombo.getSelectedItem();
-        translator.setLanguages(src, tgt);
-
-        int newSize = (Integer) cacheSizeSpinner.getValue();
-        translator.getCache().setMaxSize(newSize);
-        configManager.setConfiguration("runespeak", "cacheSize", String.valueOf(newSize));
-
+    private void applyCacheDir() {
         String dir = cacheDirField.getText().trim();
         if (!dir.isEmpty()) {
             configManager.setConfiguration("runespeak", "modelCacheDir", dir);
-            log.info("Cache directory set to: {}", dir);
-        }
-
-        String selectedModel = (String) modelCombo.getSelectedItem();
-        boolean modelChanged = !selectedModel.equals(readModelId());
-        if (modelChanged) {
-            configManager.setConfiguration("runespeak", "modelId", selectedModel);
+            log.info("Cache directory updated to: {}", dir);
             statusLabel.setText("Status: Loading model...");
-            translator.initialize(selectedModel);
+            translator.initialize(readModelId());
         }
-
-        log.info("Settings applied — {} → {}, model: {}, cache: {} max",
-                src.getDisplayName(), tgt.getDisplayName(), selectedModel, newSize);
-        applyButton.setText("Applied \u2713");
-        Timer reset = new Timer(2000, e -> applyButton.setText("Apply Settings"));
-        reset.setRepeats(false);
-        reset.start();
     }
 
     private void startRefreshTimer() {
@@ -322,11 +234,11 @@ public class RuneSpeakPanel extends PluginPanel {
 
     private void refreshStatus() {
         if (translator.isReady()) {
-            statusLabel.setText("Status: Ready (ONNX Runtime)");
+            statusLabel.setText("Status: Ready");
         } else if (translator.isLoading()) {
-            statusLabel.setText("Status: Loading model (downloading if needed)...");
+            statusLabel.setText("Status: Loading model...");
         } else {
-            statusLabel.setText("Status: Waiting — model not loaded");
+            statusLabel.setText("Status: Model not loaded");
         }
 
         modelLabel.setText("Model: " + readModelId());
@@ -342,9 +254,9 @@ public class RuneSpeakPanel extends PluginPanel {
             int start = Math.max(0, messages.size() - 10);
             String logText = messages.subList(start, messages.size()).stream()
                     .map(msg -> String.format("[%s] %s\n  \u2192 %s",
-                            msg.getSender(),
-                            truncate(msg.getOriginal(), 40),
-                            truncate(msg.getTranslation(), 40)))
+                             msg.getSender(),
+                             truncate(msg.getOriginal(), 40),
+                             truncate(msg.getTranslation(), 40)))
                     .collect(Collectors.joining("\n---\n"));
             translationLog.setText(logText);
         }
@@ -355,28 +267,17 @@ public class RuneSpeakPanel extends PluginPanel {
         return text.substring(0, maxLen - 3) + "...";
     }
 
-    private static final String DEFAULT_MODEL = "Xenova/opus-mt-en-es";
-
-    private static final java.util.Set<String> OBSOLETE_MODELS = java.util.Set.of(
-            "google-t5/t5-small",
-            "google-t5/t5-base",
-            "facebook/nllb-200-distilled-600M",
-            "Helsinki-NLP/opus-mt-en-es",
-            "Helsinki-NLP/opus-mt-en-fr",
-            "Helsinki-NLP/opus-mt-en-de"
-    );
-
     private String readModelId() {
-        String modelId = configManager.getConfiguration("runespeak", "modelId");
-        if (modelId == null || modelId.isBlank() || OBSOLETE_MODELS.contains(modelId)) {
-            return DEFAULT_MODEL;
+        String current = translator.getEngine().getCurrentModelId();
+        if (current == null || current.isBlank()) {
+            Language source = config.getSourceLanguage();
+            Language target = config.getTargetLanguage();
+            if (source == target) {
+                return "N/A (Source == Target)";
+            }
+            return "onnx-community/opus-mt-" + source.getTwoLetterCode() + "-" + target.getTwoLetterCode();
         }
-        return modelId;
-    }
-
-    private int readCacheSize() {
-        String val = configManager.getConfiguration("runespeak", "cacheSize");
-        return val != null ? Integer.parseInt(val) : 5000;
+        return current;
     }
 
     public void shutdown() {
