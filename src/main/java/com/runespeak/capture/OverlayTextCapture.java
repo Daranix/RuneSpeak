@@ -38,7 +38,6 @@ public class OverlayTextCapture {
     private volatile boolean active = false;
 
     private volatile String lastReadHash = "";
-    private volatile String lastWrittenHash = "";
 
     @Inject
     public OverlayTextCapture(Client client, RuneSpeakConfig config, LocalTranslator translator) {
@@ -106,7 +105,7 @@ public class OverlayTextCapture {
         }
 
         String currentHash = Integer.toHexString(text.hashCode());
-        if (currentHash.equals(lastReadHash) || currentHash.equals(lastWrittenHash)) return;
+        if (currentHash.equals(lastReadHash)) return;
         lastReadHash = currentHash;
 
         log.info("Overlay: '{}'", text);
@@ -119,6 +118,7 @@ public class OverlayTextCapture {
         Language target = config.getTargetLanguage();
         translator.setLanguages(source, target);
 
+        final String readHash = currentHash;
         final List<Integer> indices = textChildIndices;
 
         translator.translateAsync(text).thenAccept(translated -> {
@@ -141,8 +141,10 @@ public class OverlayTextCapture {
                         children[childIdx].setText(sb.toString());
                     }
 
-                    lastWrittenHash = Integer.toHexString(nextRead.hashCode());
+                    lastReadHash = Integer.toHexString(nextRead.hashCode());
                 }
+            } else if (readHash.equals(lastReadHash)) {
+                lastReadHash = "";
             }
         });
     }
@@ -252,7 +254,6 @@ public class OverlayTextCapture {
         if (event.getGameState() == net.runelite.api.GameState.LOGGED_IN) {
             log.debug("Overlay: LOGGED_IN — resetting hashes");
             lastReadHash = "";
-            lastWrittenHash = "";
         }
     }
 
@@ -261,7 +262,6 @@ public class OverlayTextCapture {
         currentOriginal = "";
         currentTranslation = "";
         lastReadHash = "";
-        lastWrittenHash = "";
     }
 
     private static class Segment {

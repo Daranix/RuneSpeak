@@ -6,6 +6,7 @@ import com.runespeak.capture.ChatCapture;
 import com.runespeak.capture.DialogCapture;
 import com.runespeak.capture.MenuCapture;
 import com.runespeak.capture.OverlayTextCapture;
+import com.runespeak.capture.WidgetTextScanner;
 import com.runespeak.translate.LocalTranslator;
 import lombok.extern.slf4j.Slf4j;
 
@@ -33,6 +34,7 @@ public class RuneSpeakPanel extends PluginPanel {
     private final DialogCapture dialogCapture;
     private final MenuCapture menuCapture;
     private final OverlayTextCapture overlayTextCapture;
+    private final WidgetTextScanner widgetTextScanner;
 
     private JLabel statusLabel;
     private JLabel modelLabel;
@@ -42,7 +44,7 @@ public class RuneSpeakPanel extends PluginPanel {
     private Timer refreshTimer;
 
     @Inject
-    public RuneSpeakPanel(RuneSpeakConfig config, ConfigManager configManager, LocalTranslator translator, ChatCapture chatCapture, DialogCapture dialogCapture, MenuCapture menuCapture, OverlayTextCapture overlayTextCapture) {
+    public RuneSpeakPanel(RuneSpeakConfig config, ConfigManager configManager, LocalTranslator translator, ChatCapture chatCapture, DialogCapture dialogCapture, MenuCapture menuCapture, OverlayTextCapture overlayTextCapture, WidgetTextScanner widgetTextScanner) {
         this.config = config;
         this.configManager = configManager;
         this.translator = translator;
@@ -50,6 +52,7 @@ public class RuneSpeakPanel extends PluginPanel {
         this.dialogCapture = dialogCapture;
         this.menuCapture = menuCapture;
         this.overlayTextCapture = overlayTextCapture;
+        this.widgetTextScanner = widgetTextScanner;
         initComponents();
         startRefreshTimer();
     }
@@ -196,6 +199,7 @@ public class RuneSpeakPanel extends PluginPanel {
         clearCacheBtn.addActionListener(e -> {
             translator.getCache().clear();
             overlayTextCapture.clear();
+            widgetTextScanner.clear();
             menuCapture.clear();
             dialogCapture.clear();
             chatCapture.clear();
