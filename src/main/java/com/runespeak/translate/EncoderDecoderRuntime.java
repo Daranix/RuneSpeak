@@ -90,10 +90,10 @@ public class EncoderDecoderRuntime implements ModelRuntime {
             decoderSession = ortEnv.createSession(
                     modelPath.resolve("decoder_model.onnx").toString(), opts);
 
-            log.info("Encoder Inputs: {}", encoderSession.getInputNames());
-            log.info("Encoder Outputs: {}", encoderSession.getOutputNames());
-            log.info("Decoder Inputs: {}", decoderSession.getInputNames());
-            log.info("Decoder Outputs: {}", decoderSession.getOutputNames());
+            log.debug("Encoder Inputs: {}", encoderSession.getInputNames());
+            log.debug("Encoder Outputs: {}", encoderSession.getOutputNames());
+            log.debug("Decoder Inputs: {}", decoderSession.getInputNames());
+            log.debug("Decoder Outputs: {}", decoderSession.getOutputNames());
 
             Map<String, String> tokOpts = new HashMap<>();
             tokOpts.put("addSpecialTokens", "true");

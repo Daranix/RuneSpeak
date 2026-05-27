@@ -18,6 +18,7 @@ public class LocalTranslator {
     private final OnnxTranslationEngine engine;
     private final TranslationCache cache;
     private final ExecutorService executor;
+    private final ExecutorService loadExecutor;
     private final RuneSpeakConfig config;
 
     private Language currentSource = Language.ENGLISH;
@@ -30,9 +31,15 @@ public class LocalTranslator {
         Path baseDir = resolveCacheDir();
 
         this.engine = new OnnxTranslationEngine(baseDir);
-        this.cache = new TranslationCache(baseDir.resolve("cache"), getCacheMaxSize());
+        this.cache = new TranslationCache(baseDir.resolve("cache"),
+                config.unlimitedCache() ? Integer.MAX_VALUE : config.getCacheSize());
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "runespeak-translate");
+            t.setDaemon(true);
+            return t;
+        });
+        this.loadExecutor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "runespeak-model-load");
             t.setDaemon(true);
             return t;
         });
@@ -42,10 +49,9 @@ public class LocalTranslator {
         Path baseDir = resolveCacheDir();
         engine.setBaseDir(baseDir);
 
-        executor.submit(() -> {
-            log.info("Translator executor started for model: {}", modelId);
+        loadExecutor.submit(() -> {
+            log.info("Loading model: {}", modelId);
             try {
-                log.info("Loading model: {}", modelId);
                 engine.loadModel(modelId);
                 log.info("Model loaded: {}", modelId);
             } catch (Exception e) {
@@ -55,13 +61,9 @@ public class LocalTranslator {
     }
 
     public void applyConfig() {
-        int maxSize = getCacheMaxSize();
+        int maxSize = config.unlimitedCache() ? Integer.MAX_VALUE : config.getCacheSize();
         cache.setMaxSize(maxSize);
-        log.info("Config applied — max entries: {}", maxSize);
-    }
-
-    private int getCacheMaxSize() {
-        return config.getCacheSize();
+        log.info("Config applied — max entries: {}", config.unlimitedCache() ? "unlimited" : String.valueOf(maxSize));
     }
 
     public void setLanguages(Language source, Language target) {
@@ -127,12 +129,15 @@ public class LocalTranslator {
             return CompletableFuture.completedFuture(cached);
         }
 
-        if (!engine.isLoaded()) {
-            return CompletableFuture.completedFuture("\u23F3 " + text);
-        }
-
         return CompletableFuture.supplyAsync(() -> {
             try {
+                // Wait for model to finish loading (up to 60s) instead of
+                // dropping the request — this handles early-startup messages
+                // (tutorial, login) that fire before the model is ready.
+                if (!waitForModel()) {
+                    return "\u23F3 " + text;
+                }
+
                 String result = engine.translate(text, srcCode, tgtCode).get(60, TimeUnit.SECONDS);
                 cache.put(text, result, srcCode, tgtCode);
                 return result;
@@ -141,6 +146,19 @@ public class LocalTranslator {
                 return text;
             }
         }, executor);
+    }
+
+    private boolean waitForModel() {
+        long deadline = System.currentTimeMillis() + 60_000;
+        while (!engine.isLoaded() && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return engine.isLoaded();
     }
 
     public boolean isReady() {
@@ -166,6 +184,7 @@ public class LocalTranslator {
     public void shutdown() {
         engine.shutdown();
         cache.shutdown();
+        loadExecutor.shutdown();
         executor.shutdown();
     }
 

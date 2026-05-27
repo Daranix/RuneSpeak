@@ -10,8 +10,6 @@ import net.runelite.api.Client;
 import net.runelite.api.MessageNode;
 import net.runelite.api.events.ChatMessage;
 
-import static net.runelite.api.ChatMessageType.GAMEMESSAGE;
-
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.ArrayList;
@@ -19,6 +17,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static net.runelite.api.ChatMessageType.*;
 
 @Slf4j
 @Singleton
@@ -44,8 +44,21 @@ public class ChatCapture {
         this.translator = translator;
     }
 
+    private static boolean isGameMessage(ChatMessageType type) {
+        return type == GAMEMESSAGE
+                || type == MESBOX
+                || type == DIALOG
+                || type == NPC_SAY
+                || type == LEVELUPMESSAGE
+                || type == WELCOME
+                || type == BROADCAST;
+    }
+
     public void handleChatMessage(ChatMessage event) {
-        if (event.getType() == GAMEMESSAGE) {
+        log.debug("ChatMessage type={} text='{}'", event.getType(),
+                event.getMessage() != null ? truncate(event.getMessage(), 60) : "null");
+
+        if (isGameMessage(event.getType())) {
             if (!config.translateGameMessages()) return;
         } else {
             if (!config.translateChat()) return;
@@ -112,5 +125,9 @@ public class ChatCapture {
             this.translation = translation;
             this.timestamp = timestamp;
         }
+    }
+
+    private static String truncate(String text, int max) {
+        return text.length() <= max ? text : text.substring(0, max) + "...";
     }
 }

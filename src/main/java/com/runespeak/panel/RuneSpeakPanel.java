@@ -5,6 +5,7 @@ import com.runespeak.RuneSpeakConfig;
 import com.runespeak.capture.ChatCapture;
 import com.runespeak.capture.DialogCapture;
 import com.runespeak.capture.MenuCapture;
+import com.runespeak.capture.OverlayTextCapture;
 import com.runespeak.translate.LocalTranslator;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,6 +32,7 @@ public class RuneSpeakPanel extends PluginPanel {
     private final ChatCapture chatCapture;
     private final DialogCapture dialogCapture;
     private final MenuCapture menuCapture;
+    private final OverlayTextCapture overlayTextCapture;
 
     private JLabel statusLabel;
     private JLabel modelLabel;
@@ -40,13 +42,14 @@ public class RuneSpeakPanel extends PluginPanel {
     private Timer refreshTimer;
 
     @Inject
-    public RuneSpeakPanel(RuneSpeakConfig config, ConfigManager configManager, LocalTranslator translator, ChatCapture chatCapture, DialogCapture dialogCapture, MenuCapture menuCapture) {
+    public RuneSpeakPanel(RuneSpeakConfig config, ConfigManager configManager, LocalTranslator translator, ChatCapture chatCapture, DialogCapture dialogCapture, MenuCapture menuCapture, OverlayTextCapture overlayTextCapture) {
         this.config = config;
         this.configManager = configManager;
         this.translator = translator;
         this.chatCapture = chatCapture;
         this.dialogCapture = dialogCapture;
         this.menuCapture = menuCapture;
+        this.overlayTextCapture = overlayTextCapture;
         initComponents();
         startRefreshTimer();
     }
@@ -192,6 +195,7 @@ public class RuneSpeakPanel extends PluginPanel {
         clearCacheBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
         clearCacheBtn.addActionListener(e -> {
             translator.getCache().clear();
+            overlayTextCapture.clear();
             menuCapture.clear();
             dialogCapture.clear();
             chatCapture.clear();

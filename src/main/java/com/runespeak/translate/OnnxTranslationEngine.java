@@ -39,11 +39,11 @@ public class OnnxTranslationEngine {
     public synchronized void loadModel(String modelId) throws IOException {
         log.info("Loading model: {}", modelId);
         if (loaded && currentModelId != null && currentModelId.equals(modelId)) {
-            log.info("Model {} already loaded, skipping", modelId);
+            log.debug("Model {} already loaded, skipping", modelId);
             return;
         }
         if (loading) {
-            log.info("Model {} already loading, skipping", modelId);
+            log.debug("Model {} already loading, skipping", modelId);
             return;
         }
 
@@ -51,13 +51,13 @@ public class OnnxTranslationEngine {
         shutdown();
         loading = true;
         currentModelId = modelId;
-        log.info("Set loading=true, currentModelId={}", modelId);
+        log.debug("Set loading=true, currentModelId={}", modelId);
 
         try {
             log.info("Creating models directory: {}", modelsDir);
             Files.createDirectories(modelsDir);
             Path modelPath = modelsDir.resolve(sanitizeModelId(modelId));
-            log.info("Model path: {}", modelPath);
+            log.debug("Model path: {}", modelPath);
 
             ModelRuntime newRuntime = ModelRuntime.forModelId(modelId);
 
@@ -68,13 +68,13 @@ public class OnnxTranslationEngine {
             Path tokenizerPath = modelPath.resolve("tokenizer.json");
             sanitizeTokenizerJson(tokenizerPath);
 
-            log.info("Creating OrtEnvironment");
+            log.debug("Creating OrtEnvironment");
             ortEnv = OrtEnvironment.getEnvironment();
-            log.info("OrtEnvironment created: {}", ortEnv);
+            log.debug("OrtEnvironment created: {}", ortEnv);
 
-            log.info("Loading model via runtime: {}", newRuntime.getClass().getSimpleName());
+            log.debug("Loading model via runtime: {}", newRuntime.getClass().getSimpleName());
             newRuntime.load(modelPath, ortEnv);
-            log.info("Model loaded via runtime");
+            log.debug("Model loaded via runtime");
 
             this.runtime = newRuntime;
             loaded = true;
@@ -86,7 +86,7 @@ public class OnnxTranslationEngine {
             throw new IOException("Failed to load model: " + modelId, t);
         } finally {
             loading = false;
-            log.info("Set loading=false for model {}", modelId);
+            log.debug("Set loading=false for model {}", modelId);
         }
     }
 
@@ -95,7 +95,7 @@ public class OnnxTranslationEngine {
             return;
         }
         try {
-            log.info("Sanitizing tokenizer.json at {}", tokenizerPath);
+            log.debug("Sanitizing tokenizer.json at {}", tokenizerPath);
             byte[] bytes = Files.readAllBytes(tokenizerPath);
             String content = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
             if (!content.contains("\"Precompiled\"")) {
@@ -118,7 +118,7 @@ public class OnnxTranslationEngine {
                                 com.google.gson.JsonObject normObj = normElem.getAsJsonObject();
                                 if (normObj.has("type") && "Precompiled".equals(normObj.get("type").getAsString())) {
                                     if (!normObj.has("precompiled_charsmap") || normObj.get("precompiled_charsmap").isJsonNull()) {
-                                        log.info("Removing Precompiled normalizer with null precompiled_charsmap");
+                                        log.debug("Removing Precompiled normalizer with null precompiled_charsmap");
                                         modified = true;
                                         continue;
                                     }
@@ -131,7 +131,7 @@ public class OnnxTranslationEngine {
                         }
                     } else if (normalizer.has("type") && "Precompiled".equals(normalizer.get("type").getAsString())) {
                         if (!normalizer.has("precompiled_charsmap") || normalizer.get("precompiled_charsmap").isJsonNull()) {
-                            log.info("Removing root Precompiled normalizer with null precompiled_charsmap");
+                            log.debug("Removing root Precompiled normalizer with null precompiled_charsmap");
                             json.remove("normalizer");
                             modified = true;
                         }

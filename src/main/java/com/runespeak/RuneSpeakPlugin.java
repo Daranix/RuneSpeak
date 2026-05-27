@@ -4,6 +4,7 @@ import com.google.inject.Provides;
 import com.runespeak.capture.ChatCapture;
 import com.runespeak.capture.DialogCapture;
 import com.runespeak.capture.MenuCapture;
+import com.runespeak.capture.OverlayTextCapture;
 import com.runespeak.overlay.TranslationOverlay;
 import com.runespeak.panel.RuneSpeakPanel;
 import com.runespeak.translate.LocalTranslator;
@@ -12,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.events.MenuOpened;
@@ -63,6 +65,9 @@ public class RuneSpeakPlugin extends Plugin {
     private ChatCapture chatCapture;
 
     @Inject
+    private OverlayTextCapture overlayTextCapture;
+
+    @Inject
     private TranslationOverlay translationOverlay;
 
     @Inject
@@ -73,6 +78,8 @@ public class RuneSpeakPlugin extends Plugin {
     @Override
     protected void startUp() {
         log.info("RuneSpeak starting up...");
+
+        migrateConfigKeys();
 
         translator.applyConfig();
 
@@ -113,12 +120,19 @@ public class RuneSpeakPlugin extends Plugin {
     }
 
     @Subscribe
+    public void onGameStateChanged(GameStateChanged event) {
+        overlayTextCapture.onGameStateChanged(event);
+    }
+
+    @Subscribe
     public void onGameTick(GameTick tick) {
         if (client.getGameState() != GameState.LOGGED_IN) return;
 
         if (config.translateNpcDialogue()) {
             dialogCapture.checkAndTranslateDialog();
         }
+
+        overlayTextCapture.checkAndTranslate();
     }
 
     @Subscribe
@@ -176,6 +190,7 @@ public class RuneSpeakPlugin extends Plugin {
                 dialogCapture.clear();
                 menuCapture.clear();
                 chatCapture.clear();
+                overlayTextCapture.clear();
                 log.info("Translation cache and dialog state cleared for new language pair.");
 
                 if (source != target) {
@@ -198,6 +213,15 @@ public class RuneSpeakPlugin extends Plugin {
 
     private static final String DEFAULT_MODEL = "onnx-community/opus-mt-en-es";
 
+    private void migrateConfigKeys() {
+        String oldVal = configManager.getConfiguration("runespeak", "translateTutorial");
+        if (oldVal != null) {
+            configManager.setConfiguration("runespeak", "translateOverlayText", oldVal);
+            configManager.unsetConfiguration("runespeak", "translateTutorial");
+            log.info("Migrated config key: translateTutorial -> translateOverlayText");
+        }
+    }
+
     private void startModelLoading() {
         Language source = config.getSourceLanguage();
         Language target = config.getTargetLanguage();
@@ -206,7 +230,7 @@ public class RuneSpeakPlugin extends Plugin {
             log.info("startModelLoading: Loading model: {}", modelId);
             translator.initialize(modelId);
         }
-        log.info("startModelLoading: Initialization submitted to executor");
+        log.debug("startModelLoading: Initialization submitted to executor");
     }
 
     private void initPanel() {

@@ -2,6 +2,7 @@ package com.runespeak.overlay;
 
 import com.runespeak.RuneSpeakConfig;
 import com.runespeak.capture.DialogCapture;
+import com.runespeak.capture.OverlayTextCapture;
 import com.runespeak.translate.LocalTranslator;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
@@ -21,13 +22,15 @@ public class TranslationOverlay extends Overlay {
     private final Client client;
     private final RuneSpeakConfig config;
     private final DialogCapture dialogCapture;
+    private final OverlayTextCapture overlayTextCapture;
     private final LocalTranslator translator;
 
     @Inject
-    public TranslationOverlay(Client client, RuneSpeakConfig config, DialogCapture dialogCapture, LocalTranslator translator) {
+    public TranslationOverlay(Client client, RuneSpeakConfig config, DialogCapture dialogCapture, OverlayTextCapture overlayTextCapture, LocalTranslator translator) {
         this.client = client;
         this.config = config;
         this.dialogCapture = dialogCapture;
+        this.overlayTextCapture = overlayTextCapture;
         this.translator = translator;
         setPosition(OverlayPosition.TOP_LEFT);
         setLayer(OverlayLayer.ABOVE_WIDGETS);
@@ -38,30 +41,52 @@ public class TranslationOverlay extends Overlay {
     public Dimension render(Graphics2D graphics) {
         if (!config.showOriginal()) return null;
 
-        String original = dialogCapture.getCurrentDialogOriginal();
-        if (original == null || original.isEmpty()) return null;
-
-        String clean = stripTags(original);
-        if (clean.isEmpty()) return null;
-
+        int y = 5;
         FontMetrics fm = graphics.getFontMetrics();
-
-        String label = "Original: " + clean;
-        int textWidth = fm.stringWidth(label);
-        int textHeight = fm.getHeight();
-
         int pad = 4;
-        int x = 5;
-        int y = 5 + textHeight;
 
-        graphics.setColor(new Color(0, 0, 0, 180));
-        graphics.fillRect(x - pad, y - textHeight - pad,
-                textWidth + pad * 2, textHeight + pad * 2);
+        // NPC dialog original text
+        String dialogOriginal = dialogCapture.getCurrentDialogOriginal();
+        if (dialogOriginal != null && !dialogOriginal.isEmpty()) {
+            String clean = stripTags(dialogOriginal);
+            if (!clean.isEmpty()) {
+                String label = "NPC: " + clean;
+                int textWidth = fm.stringWidth(label);
+                int textHeight = fm.getHeight();
 
-        graphics.setColor(Color.GREEN);
-        graphics.drawString(label, x, y);
+                graphics.setColor(new Color(0, 0, 0, 180));
+                graphics.fillRect(5 - pad, y + textHeight - textHeight - pad,
+                        textWidth + pad * 2, textHeight + pad * 2);
 
-        return new Dimension(textWidth + pad * 2, textHeight + pad * 2);
+                graphics.setColor(Color.GREEN);
+                graphics.drawString(label, 5, y + textHeight);
+                y += textHeight + pad * 2 + 4;
+            }
+        }
+
+        // Overlay text original (tutorial, notifications, etc.)
+        String overlayOriginal = overlayTextCapture.getCurrentOriginal();
+        if (overlayOriginal != null && !overlayOriginal.isEmpty()) {
+            String clean = stripTags(overlayOriginal);
+            if (!clean.isEmpty()) {
+                String label = "Overlay: " + clean;
+                int textWidth = fm.stringWidth(label);
+                int textHeight = fm.getHeight();
+
+                graphics.setColor(new Color(0, 0, 0, 180));
+                graphics.fillRect(5 - pad, y + textHeight - textHeight - pad,
+                        textWidth + pad * 2, textHeight + pad * 2);
+
+                graphics.setColor(Color.GREEN);
+                graphics.drawString(label, 5, y + textHeight);
+                y += textHeight + pad * 2 + 4;
+            }
+        }
+
+        return new Dimension(
+                5 + pad * 2,
+                y - 5
+        );
     }
 
     private static String stripTags(String text) {

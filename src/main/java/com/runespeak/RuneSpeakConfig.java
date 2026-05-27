@@ -101,10 +101,21 @@ public interface RuneSpeakConfig extends Config {
     }
 
     @ConfigItem(
+            keyName = "translateOverlayText",
+            name = "Overlay Text Instructions",
+            description = "Translate the overlay text widget (tutorial instructions, xp drops, notifications)",
+            position = 5,
+            section = SECTION_DISPLAY
+    )
+    default boolean translateOverlayText() {
+        return true;
+    }
+
+    @ConfigItem(
             keyName = "translateItemNames",
             name = "Item/NPC/Object Names",
             description = "Translate item, NPC, and object names",
-            position = 5,
+            position = 6,
             section = SECTION_DISPLAY
     )
     default boolean translateNames() {
@@ -134,10 +145,21 @@ public interface RuneSpeakConfig extends Config {
     }
 
     @ConfigItem(
+            keyName = "unlimitedCache",
+            name = "Unlimited Cache Size",
+            description = "Disable the cache size limit — cache will never evict entries",
+            position = 7,
+            section = SECTION_TRANSLATION
+    )
+    default boolean unlimitedCache() {
+        return true;
+    }
+
+    @ConfigItem(
             keyName = "cacheSize",
             name = "Max Cache Size",
-            description = "Maximum number of translation entries to keep in cache",
-            position = 7,
+            description = "Maximum number of translation entries to keep in cache (only applies when Unlimited Cache is OFF)",
+            position = 8,
             section = SECTION_TRANSLATION
     )
     default int getCacheSize() {
@@ -148,7 +170,7 @@ public interface RuneSpeakConfig extends Config {
             keyName = "modelCacheDir",
             name = "Model Cache Directory",
             description = "Custom directory to store downloaded ONNX models and translation cache",
-            position = 8,
+            position = 9,
             section = SECTION_TRANSLATION
     )
     default String getModelCacheDir() {

@@ -25,10 +25,11 @@ public class TranslationCache {
     public TranslationCache(Path cacheDir, int maxSize) {
         this.maxSize = maxSize;
         this.cacheFile = cacheDir.resolve("translation_cache.properties");
-        this.cache = new LinkedHashMap<String, String>(maxSize, 0.75f, true) {
+        this.cache = new LinkedHashMap<String, String>(256, 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
-                return size() > TranslationCache.this.maxSize;
+                return TranslationCache.this.maxSize < Integer.MAX_VALUE
+                        && size() > TranslationCache.this.maxSize;
             }
         };
 
