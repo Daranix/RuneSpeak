@@ -1,9 +1,10 @@
 package com.runespeak.overlay;
 
+import com.runespeak.Language;
 import com.runespeak.RuneSpeakConfig;
 import com.runespeak.capture.DialogCapture;
-import com.runespeak.capture.MenuCapture;
 import com.runespeak.translate.LocalTranslator;
+import com.runespeak.translate.TranslationCache;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.MenuEntry;
@@ -27,17 +28,17 @@ public class TranslationOverlay extends Overlay {
 
     private final Client client;
     private final RuneSpeakConfig config;
-    private final MenuCapture menuCapture;
     private final DialogCapture dialogCapture;
     private final LocalTranslator translator;
+    private final TranslationCache cache;
 
     @Inject
-    public TranslationOverlay(Client client, RuneSpeakConfig config, MenuCapture menuCapture, DialogCapture dialogCapture, LocalTranslator translator) {
+    public TranslationOverlay(Client client, RuneSpeakConfig config, DialogCapture dialogCapture, LocalTranslator translator) {
         this.client = client;
         this.config = config;
-        this.menuCapture = menuCapture;
         this.dialogCapture = dialogCapture;
         this.translator = translator;
+        this.cache = translator.getCache();
         setPosition(OverlayPosition.DYNAMIC);
         setLayer(OverlayLayer.ABOVE_WIDGETS);
         setPriority(OverlayPriority.HIGH);
@@ -102,6 +103,11 @@ public class TranslationOverlay extends Overlay {
     private void renderMenuHoverTranslation(Graphics2D graphics) {
         if (!config.translateMenuEntries()) return;
 
+        Language src = translator.getCurrentSource();
+        Language tgt = translator.getCurrentTarget();
+        String srcCode = src.getFloresCode();
+        String tgtCode = tgt.getFloresCode();
+
         MenuEntry[] entries = client.getMenuEntries();
         if (entries == null || entries.length == 0) return;
 
@@ -112,13 +118,13 @@ public class TranslationOverlay extends Overlay {
             String option = entry.getOption();
             if (option == null || option.isEmpty()) continue;
 
-            String translation = menuCapture.getTranslation("option:" + option);
+            String translation = cache.get(option, srcCode, tgtCode);
             if (translation == null || translation.equals(option)) continue;
 
             String target = entry.getTarget();
             String targetTranslation = null;
             if (target != null && !target.isEmpty() && !target.equals(option)) {
-                targetTranslation = menuCapture.getTranslation("target:" + target);
+                targetTranslation = cache.get(target, srcCode, tgtCode);
             }
 
             graphics.setFont(new Font("Dialog", Font.BOLD, 12));

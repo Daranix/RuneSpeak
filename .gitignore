@@ -16,3 +16,4 @@ build/
 Thumbs.db
 runelite-plugin.properties
 .gradle-cli/
+.runespeak

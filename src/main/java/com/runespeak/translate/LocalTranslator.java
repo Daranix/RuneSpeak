@@ -1,8 +1,8 @@
 package com.runespeak.translate;
 
 import com.runespeak.Language;
-import com.runespeak.RuneSpeakConfig;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.config.ConfigManager;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Singleton
@@ -17,19 +18,19 @@ public class LocalTranslator {
     private final OnnxTranslationEngine engine;
     private final TranslationCache cache;
     private final ExecutorService executor;
-    private final RuneSpeakConfig config;
+    private final ConfigManager configManager;
 
     private Language currentSource = Language.ENGLISH;
     private Language currentTarget = Language.SPANISH;
 
     @Inject
-    public LocalTranslator(RuneSpeakConfig config) {
-        this.config = config;
+    public LocalTranslator(ConfigManager configManager) {
+        this.configManager = configManager;
 
         Path baseDir = resolveCacheDir();
 
         this.engine = new OnnxTranslationEngine(baseDir);
-        this.cache = new TranslationCache(baseDir.resolve("cache"), config.getCacheSize());
+        this.cache = new TranslationCache(baseDir.resolve("cache"), getCacheMaxSize());
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "runespeak-translate");
             t.setDaemon(true);
@@ -52,8 +53,14 @@ public class LocalTranslator {
     }
 
     public void applyConfig() {
-        cache.setMaxSize(config.getCacheSize());
-        log.info("Config applied — max entries: {}", config.getCacheSize());
+        int maxSize = getCacheMaxSize();
+        cache.setMaxSize(maxSize);
+        log.info("Config applied — max entries: {}", maxSize);
+    }
+
+    private int getCacheMaxSize() {
+        String val = configManager.getConfiguration("runespeak", "cacheSize");
+        return val != null ? Integer.parseInt(val) : 5000;
     }
 
     public void setLanguages(Language source, Language target) {
@@ -75,8 +82,6 @@ public class LocalTranslator {
 
         String srcCode = currentSource.getFloresCode();
         String tgtCode = currentTarget.getFloresCode();
-        String srcName = currentSource.getDisplayName();
-        String tgtName = currentTarget.getDisplayName();
 
         String cached = cache.get(text, srcCode, tgtCode);
         if (cached != null) return cached;
@@ -86,11 +91,21 @@ public class LocalTranslator {
         }
 
         try {
-            String result = engine.translate(text, srcName, tgtName).get(60, java.util.concurrent.TimeUnit.SECONDS);
-            cache.put(text, result, srcCode, tgtCode);
-            return result != null ? result : text;
+            String result = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return engine.translate(text, srcCode, tgtCode).get(60, TimeUnit.SECONDS);
+                        } catch (Exception e) {
+                            log.error("Translation failed for '{}': {}", truncate(text, 30), e.getMessage());
+                            return text;
+                        }
+                    }, executor)
+                    .get(60, TimeUnit.SECONDS);
+            if (!result.equals(text)) {
+                cache.put(text, result, srcCode, tgtCode);
+            }
+            return result;
         } catch (Exception e) {
-            log.error("Translation failed for '{}': {}", truncate(text, 30), e.getMessage());
+            log.error("translateSync failed: {}", e.getMessage());
             return text;
         }
     }
@@ -115,15 +130,16 @@ public class LocalTranslator {
             return CompletableFuture.completedFuture("\u23F3 " + text);
         }
 
-        return engine.translate(text, srcCode, tgtCode)
-                .thenApply(result -> {
-                    cache.put(text, result, srcCode, tgtCode);
-                    return result;
-                })
-                .exceptionally(e -> {
-                    log.error("Async translation failed: {}", e.getMessage());
-                    return text;
-                });
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String result = engine.translate(text, srcCode, tgtCode).get(60, TimeUnit.SECONDS);
+                cache.put(text, result, srcCode, tgtCode);
+                return result;
+            } catch (Exception e) {
+                log.error("Async translation failed for '{}': {}", truncate(text, 30), e.getMessage());
+                return text;
+            }
+        }, executor);
     }
 
     public boolean isReady() {
@@ -153,7 +169,7 @@ public class LocalTranslator {
     }
 
     private Path resolveCacheDir() {
-        String custom = config.getModelCacheDir();
+        String custom = configManager.getConfiguration("runespeak", "modelCacheDir");
         if (custom != null && !custom.isBlank()) {
             return Path.of(custom);
         }

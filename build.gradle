@@ -16,11 +16,9 @@ repositories {
 def runeLiteVersion = 'latest.release'
 def pluginMainClass = 'com.runespeak.RuneSpeakPluginTest'
 
-configurations.all {
-    resolutionStrategy {
-        force 'com.microsoft.onnxruntime:onnxruntime:1.19.2'
-    }
-}
+// configurations.all {
+//     exclude group: 'com.microsoft.onnxruntime', module: 'onnxruntime'
+// }
 
 dependencies {
     compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
@@ -28,7 +26,7 @@ dependencies {
     compileOnly 'org.projectlombok:lombok:1.18.46'
     annotationProcessor 'org.projectlombok:lombok:1.18.46'
 
-    implementation 'com.microsoft.onnxruntime:onnxruntime:1.19.2'
+    implementation 'com.microsoft.onnxruntime:onnxruntime:1.23.0'
     implementation('ai.djl.huggingface:tokenizers:0.36.0') {
         exclude group: 'com.microsoft.onnxruntime'
     }
@@ -75,6 +73,20 @@ tasks.register('shadowJar', Jar) {
     filesMatching('**/*.dylib') { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
 }
 
+tasks.register('runBenchmark', JavaExec) {
+    group = 'runespeak'
+    description = 'Run translation benchmark across models'
+    dependsOn 'classes'
+    classpath = sourceSets.main.runtimeClasspath + sourceSets.test.runtimeClasspath
+    mainClass = 'com.runespeak.benchmark.TranslationBenchmark'
+    executable = 'D:\\DevEnv\\Java\\jdk-25\\bin\\java.exe'
+    jvmArgs '-ea'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    if (project.hasProperty('cache')) {
+        jvmArgs "-Drunespeak.cache=${project.cache}"
+    }
+}
+
 tasks.register('runRuneLite', JavaExec) {
     group = 'runelite'
     description = 'Run RuneLite with RuneSpeak plugin'
@@ -82,9 +94,14 @@ tasks.register('runRuneLite', JavaExec) {
 
     classpath = sourceSets.test.runtimeClasspath
     mainClass = pluginMainClass
+    executable = 'D:\\DevEnv\\Java\\jdk-25\\bin\\java.exe'
     args '--developer-mode', '--debug'
     jvmArgs '-ea'
-
-    // Helps ORT find its native lib when running outside a fat jar
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
     jvmArgs "-Djava.library.path=${configurations.runtimeClasspath.asPath}"
+}
+
+test {
+    executable = 'D:\\DevEnv\\Java\\jdk-25\\bin\\java.exe'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
 }

@@ -12,8 +12,6 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -35,13 +33,11 @@ public class RuneSpeakPanel extends PluginPanel {
     private Timer refreshTimer;
 
     private static final String[] MODEL_PRESETS = {
+            "Xenova/opus-mt-en-es",
+            "onnx-community/Qwen2.5-0.5B-Instruct-ONNX",
+            "onnx-community/Llama-3.2-1B-Instruct-ONNX",
+            "onnx-community/t5-small-ONNX",
             "echarlaix/t5-small-onnx",
-            "google-t5/t5-small",
-            "google-t5/t5-base",
-            "facebook/nllb-200-distilled-600M",
-            "Helsinki-NLP/opus-mt-en-es",
-            "Helsinki-NLP/opus-mt-en-fr",
-            "Helsinki-NLP/opus-mt-en-de"
     };
 
     private JComboBox<Language> sourceCombo;
@@ -96,7 +92,7 @@ public class RuneSpeakPanel extends PluginPanel {
         statusLabel.setFont(new Font("Dialog", Font.PLAIN, 12));
         header.add(statusLabel, gbc);
 
-        modelLabel = new JLabel("Model: " + config.getModelId());
+        modelLabel = new JLabel("Model: " + readModelId());
         modelLabel.setFont(new Font("Dialog", Font.PLAIN, 10));
         header.add(modelLabel, gbc);
 
@@ -118,24 +114,40 @@ public class RuneSpeakPanel extends PluginPanel {
 
         Language[] languages = Language.values();
 
-        JPanel langRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        langRow.add(new JLabel("From:"));
+        JPanel langRow = new JPanel(new GridBagLayout());
+        GridBagConstraints lc = new GridBagConstraints();
+        lc.anchor = GridBagConstraints.WEST;
+        lc.insets = new Insets(0, 0, 0, 2);
+
+        lc.gridx = 0; lc.weightx = 0; lc.fill = GridBagConstraints.NONE;
+        langRow.add(new JLabel("From:"), lc);
+
         sourceCombo = new JComboBox<>(languages);
         sourceCombo.setSelectedItem(config.getSourceLanguage());
-        sourceCombo.setPreferredSize(new Dimension(150, 24));
-        langRow.add(sourceCombo);
-        langRow.add(new JLabel("  To:"));
+        lc.gridx = 1; lc.weightx = 0.5; lc.fill = GridBagConstraints.HORIZONTAL;
+        langRow.add(sourceCombo, lc);
+
+        lc.gridx = 2; lc.weightx = 0; lc.fill = GridBagConstraints.NONE;
+        langRow.add(new JLabel("\u00a0To:"), lc);
+
         targetCombo = new JComboBox<>(languages);
         targetCombo.setSelectedItem(config.getTargetLanguage());
-        targetCombo.setPreferredSize(new Dimension(150, 24));
-        langRow.add(targetCombo);
+        lc.gridx = 3; lc.weightx = 0.5; lc.fill = GridBagConstraints.HORIZONTAL;
+        langRow.add(targetCombo, lc);
+
         section.add(langRow, gbc);
 
-        JPanel modelRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        modelRow.add(new JLabel("Model:"));
+        JPanel modelRow = new JPanel(new GridBagLayout());
+        GridBagConstraints mc = new GridBagConstraints();
+        mc.anchor = GridBagConstraints.WEST;
+        mc.insets = new Insets(0, 0, 0, 2);
+
+        mc.gridx = 0; mc.weightx = 0; mc.fill = GridBagConstraints.NONE;
+        modelRow.add(new JLabel("Model:"), mc);
+
         modelCombo = new JComboBox<>(MODEL_PRESETS);
         modelCombo.setEditable(true);
-        String currentModel = config.getModelId();
+        String currentModel = readModelId();
         boolean found = false;
         for (int i = 0; i < MODEL_PRESETS.length; i++) {
             if (MODEL_PRESETS[i].equals(currentModel)) {
@@ -147,46 +159,70 @@ public class RuneSpeakPanel extends PluginPanel {
         if (!found) {
             modelCombo.setSelectedItem(currentModel);
         }
-        modelCombo.setPreferredSize(new Dimension(250, 24));
-        modelRow.add(modelCombo);
+        mc.gridx = 1; mc.weightx = 1.0; mc.fill = GridBagConstraints.HORIZONTAL;
+        modelRow.add(modelCombo, mc);
         section.add(modelRow, gbc);
 
-        JPanel cacheRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        cacheRow.add(new JLabel("Max cache:"));
-        cacheSizeSpinner = new JSpinner(new SpinnerNumberModel(config.getCacheSize(), 100, 100_000, 500));
-        cacheSizeSpinner.setPreferredSize(new Dimension(100, 24));
-        cacheRow.add(cacheSizeSpinner);
-        cacheRow.add(new JLabel(" entries"));
+        JPanel cacheRow = new JPanel(new GridBagLayout());
+        GridBagConstraints cc = new GridBagConstraints();
+        cc.anchor = GridBagConstraints.WEST;
+        cc.insets = new Insets(0, 0, 0, 2);
+
+        cc.gridx = 0; cc.weightx = 0; cc.fill = GridBagConstraints.NONE;
+        cacheRow.add(new JLabel("Max cache:"), cc);
+
+        cacheSizeSpinner = new JSpinner(new SpinnerNumberModel(readCacheSize(), 100, 100_000, 500));
+        cc.gridx = 1; cc.weightx = 0; cc.fill = GridBagConstraints.HORIZONTAL;
+        cacheRow.add(cacheSizeSpinner, cc);
+
+        cc.gridx = 2; cc.weightx = 1.0; cc.fill = GridBagConstraints.NONE;
+        cacheRow.add(new JLabel(" entries"), cc);
         section.add(cacheRow, gbc);
 
-        JPanel dirLabelRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        dirLabelRow.add(new JLabel("Cache dir:"));
+        JPanel dirLabelRow = new JPanel(new GridBagLayout());
+        GridBagConstraints dc = new GridBagConstraints();
+        dc.anchor = GridBagConstraints.WEST;
+        dirLabelRow.add(new JLabel("Cache dir:"), dc);
         section.add(dirLabelRow, gbc);
 
-        JPanel dirRow = new JPanel(new BorderLayout(4, 0));
+        JPanel dirRow = new JPanel(new GridBagLayout());
+        GridBagConstraints dirc = new GridBagConstraints();
+        dirc.insets = new Insets(0, 0, 0, 2);
+
         cacheDirField = new JTextField();
-        Path currentDir = translator.getCacheDir();
-        cacheDirField.setText(currentDir.toAbsolutePath().toString());
-        cacheDirField.setPreferredSize(new Dimension(200, 24));
-        dirRow.add(cacheDirField, BorderLayout.CENTER);
+        String savedDir = configManager.getConfiguration("runespeak", "modelCacheDir");
+        if (savedDir != null && !savedDir.isBlank()) {
+            cacheDirField.setText(Path.of(savedDir).toAbsolutePath().toString());
+        } else {
+            cacheDirField.setText(translator.getCacheDir().toAbsolutePath().toString());
+        }
+        dirc.gridx = 0; dirc.weightx = 1.0; dirc.fill = GridBagConstraints.HORIZONTAL;
+        dirRow.add(cacheDirField, dirc);
 
         JButton browseButton = new JButton("Browse...");
         browseButton.addActionListener(e -> chooseCacheDir());
-        dirRow.add(browseButton, BorderLayout.EAST);
+        dirc.gridx = 1; dirc.weightx = 0; dirc.fill = GridBagConstraints.NONE;
+        dirRow.add(browseButton, dirc);
         section.add(dirRow, gbc);
 
-        JPanel applyRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+        JPanel applyRow = new JPanel(new GridBagLayout());
+        GridBagConstraints ac = new GridBagConstraints();
+        ac.anchor = GridBagConstraints.WEST;
+        ac.insets = new Insets(0, 0, 0, 4);
+
         applyButton = new JButton("Apply Settings");
         applyButton.addActionListener(e -> applySettings());
-        applyRow.add(applyButton);
+        ac.gridx = 0;
+        applyRow.add(applyButton, ac);
 
-        JButton refreshCacheBtn = new JButton("Flush Cache");
-        refreshCacheBtn.setToolTipText("Write in-memory cache to disk now");
-        refreshCacheBtn.addActionListener(e -> {
-            translator.getCache().flushNow();
+        JButton refreshCacheBtn = new JButton("Clear Cache");
+            refreshCacheBtn.setToolTipText("Remove all cached translations");
+            refreshCacheBtn.addActionListener(e -> {
+            translator.getCache().clear();
             refreshStatus();
         });
-        applyRow.add(refreshCacheBtn);
+        ac.gridx = 1; ac.insets = new Insets(0, 0, 0, 0);
+        applyRow.add(refreshCacheBtn, ac);
 
         section.add(applyRow, gbc);
         parent.add(section);
@@ -202,29 +238,34 @@ public class RuneSpeakPanel extends PluginPanel {
         translationLog.setLineWrap(true);
         translationLog.setWrapStyleWord(true);
         JScrollPane scrollPane = new JScrollPane(translationLog);
-        scrollPane.setPreferredSize(new Dimension(250, 200));
+        scrollPane.setPreferredSize(new Dimension(0, 200));
         section.add(scrollPane, BorderLayout.CENTER);
 
         parent.add(section);
     }
 
     private void addButtonPanel() {
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+        JPanel buttonPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints bc = new GridBagConstraints();
+        bc.anchor = GridBagConstraints.WEST;
+        bc.insets = new Insets(0, 0, 0, 4);
 
         JButton clearButton = new JButton("Clear Log");
         clearButton.addActionListener(e -> {
             translationLog.setText("");
             chatCapture.clear();
         });
-        buttonPanel.add(clearButton);
+        bc.gridx = 0;
+        buttonPanel.add(clearButton, bc);
 
         JButton reloadButton = new JButton("Reload Model");
         reloadButton.addActionListener(e -> {
             reloadButton.setEnabled(false);
             statusLabel.setText("Status: Loading model...");
-            translator.initialize(config.getModelId());
+            translator.initialize(readModelId());
         });
-        buttonPanel.add(reloadButton);
+        bc.gridx = 1; bc.insets = new Insets(0, 0, 0, 0);
+        buttonPanel.add(reloadButton, bc);
 
         add(buttonPanel, BorderLayout.SOUTH);
     }
@@ -250,14 +291,16 @@ public class RuneSpeakPanel extends PluginPanel {
 
         int newSize = (Integer) cacheSizeSpinner.getValue();
         translator.getCache().setMaxSize(newSize);
+        configManager.setConfiguration("runespeak", "cacheSize", String.valueOf(newSize));
 
         String dir = cacheDirField.getText().trim();
         if (!dir.isEmpty()) {
+            configManager.setConfiguration("runespeak", "modelCacheDir", dir);
             log.info("Cache directory set to: {}", dir);
         }
 
         String selectedModel = (String) modelCombo.getSelectedItem();
-        boolean modelChanged = !selectedModel.equals(config.getModelId());
+        boolean modelChanged = !selectedModel.equals(readModelId());
         if (modelChanged) {
             configManager.setConfiguration("runespeak", "modelId", selectedModel);
             statusLabel.setText("Status: Loading model...");
@@ -286,7 +329,7 @@ public class RuneSpeakPanel extends PluginPanel {
             statusLabel.setText("Status: Waiting — model not loaded");
         }
 
-        modelLabel.setText("Model: " + config.getModelId());
+        modelLabel.setText("Model: " + readModelId());
         cacheCountLabel.setText("Cache: " + translator.getCache().size()
                 + " / " + translator.getCache().getMaxSize() + " entries");
 
@@ -310,6 +353,30 @@ public class RuneSpeakPanel extends PluginPanel {
     private static String truncate(String text, int maxLen) {
         if (text.length() <= maxLen) return text;
         return text.substring(0, maxLen - 3) + "...";
+    }
+
+    private static final String DEFAULT_MODEL = "Xenova/opus-mt-en-es";
+
+    private static final java.util.Set<String> OBSOLETE_MODELS = java.util.Set.of(
+            "google-t5/t5-small",
+            "google-t5/t5-base",
+            "facebook/nllb-200-distilled-600M",
+            "Helsinki-NLP/opus-mt-en-es",
+            "Helsinki-NLP/opus-mt-en-fr",
+            "Helsinki-NLP/opus-mt-en-de"
+    );
+
+    private String readModelId() {
+        String modelId = configManager.getConfiguration("runespeak", "modelId");
+        if (modelId == null || modelId.isBlank() || OBSOLETE_MODELS.contains(modelId)) {
+            return DEFAULT_MODEL;
+        }
+        return modelId;
+    }
+
+    private int readCacheSize() {
+        String val = configManager.getConfiguration("runespeak", "cacheSize");
+        return val != null ? Integer.parseInt(val) : 5000;
     }
 
     public void shutdown() {

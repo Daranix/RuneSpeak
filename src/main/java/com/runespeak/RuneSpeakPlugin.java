@@ -64,6 +64,9 @@ public class RuneSpeakPlugin extends Plugin {
     @Inject
     private TranslationOverlay translationOverlay;
 
+    @Inject
+    private ConfigManager configManager;
+
     private RuneSpeakPanel panel;
     private NavigationButton navButton;
     @Override
@@ -158,25 +161,25 @@ public class RuneSpeakPlugin extends Plugin {
                 log.info("Languages updated: {} → {}", source.getDisplayName(), target.getDisplayName());
                 break;
             }
-            case "modelId": {
-                startModelLoading();
-                break;
-            }
-            case "cacheSize": {
-                translator.applyConfig();
-                log.info("Cache size updated to: {}", config.getCacheSize());
-                break;
-            }
-            case "modelCacheDir": {
-                translator.applyConfig();
-                log.info("Cache directory updated to: {}", config.getModelCacheDir());
-                break;
-            }
         }
     }
 
+    private static final java.util.Set<String> OBSOLETE_MODELS = java.util.Set.of(
+            "google-t5/t5-small",
+            "google-t5/t5-base",
+            "facebook/nllb-200-distilled-600M",
+            "Helsinki-NLP/opus-mt-en-es",
+            "Helsinki-NLP/opus-mt-en-fr",
+            "Helsinki-NLP/opus-mt-en-de"
+    );
+
+    private static final String DEFAULT_MODEL = "Xenova/opus-mt-en-es";
+
     private void startModelLoading() {
-        String modelId = config.getModelId();
+        String modelId = configManager.getConfiguration("runespeak", "modelId");
+        if (modelId == null || modelId.isBlank() || OBSOLETE_MODELS.contains(modelId)) {
+            modelId = DEFAULT_MODEL;
+        }
         log.info("startModelLoading: Loading model: {}", modelId);
         translator.initialize(modelId);
         log.info("startModelLoading: Initialization submitted to executor");

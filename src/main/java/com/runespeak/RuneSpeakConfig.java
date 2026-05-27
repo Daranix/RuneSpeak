@@ -15,22 +15,6 @@ public interface RuneSpeakConfig extends Config {
     )
     String SECTION_TRANSLATION = "translation";
 
-    @ConfigSection(
-            name = "Model",
-            description = "AI model and cache settings",
-            position = 10,
-            closedByDefault = false
-    )
-    String SECTION_MODEL = "model";
-
-    @ConfigSection(
-            name = "Display",
-            description = "Overlay display settings",
-            position = 20,
-            closedByDefault = false
-    )
-    String SECTION_DISPLAY = "display";
-
     @ConfigItem(
             keyName = "targetLanguage",
             name = "Target Language",
@@ -53,38 +37,13 @@ public interface RuneSpeakConfig extends Config {
         return Language.ENGLISH;
     }
 
-    @ConfigItem(
-            keyName = "modelId",
-            name = "HuggingFace Model",
-            description = "Model ID from HuggingFace Hub with ONNX files (e.g., echarlaix/t5-small-onnx)",
-            position = 0,
-            section = SECTION_MODEL
+    @ConfigSection(
+            name = "Display",
+            description = "Overlay display settings",
+            position = 10,
+            closedByDefault = false
     )
-    default String getModelId() {
-        return "echarlaix/t5-small-onnx";
-    }
-
-    @ConfigItem(
-            keyName = "cacheSize",
-            name = "Max Cache Entries",
-            description = "Maximum number of translations to keep in cache (file-persisted)",
-            position = 1,
-            section = SECTION_MODEL
-    )
-    default int getCacheSize() {
-        return 5000;
-    }
-
-    @ConfigItem(
-            keyName = "modelCacheDir",
-            name = "Cache Directory",
-            description = "Directory to store downloaded models and translation cache",
-            position = 2,
-            section = SECTION_MODEL
-    )
-    default String getModelCacheDir() {
-        return "";
-    }
+    String SECTION_DISPLAY = "display";
 
     @ConfigItem(
             keyName = "translateNpcDialogue",

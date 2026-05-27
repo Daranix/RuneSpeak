@@ -86,7 +86,7 @@ public class TranslationCache {
                 cache.clear();
                 for (String line : Files.readAllLines(cacheFile, StandardCharsets.UTF_8)) {
                     if (line.isEmpty() || line.startsWith("#")) continue;
-                    int sep = line.indexOf('=');
+                    int sep = findSeparator(line);
                     if (sep < 0) continue;
                     String key = unescape(line.substring(0, sep));
                     String value = unescape(line.substring(sep + 1));
@@ -97,6 +97,25 @@ public class TranslationCache {
         } catch (IOException e) {
             log.warn("Could not load cache from {}: {}", cacheFile, e.getMessage());
         }
+    }
+
+    private static int findSeparator(String line) {
+        boolean escaped = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (c == '=') {
+                return i;
+            }
+        }
+        return -1;
     }
 
     public void flushNow() {
