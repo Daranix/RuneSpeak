@@ -31,8 +31,6 @@ dependencies {
         exclude group: 'com.microsoft.onnxruntime'
     }
 
-    runtimeOnly 'ch.qos.logback:logback-classic:1.5.16'
-
     testImplementation 'junit:junit:4.13.2'
     testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
     testImplementation group: 'net.runelite', name: 'jshell', version: runeLiteVersion
