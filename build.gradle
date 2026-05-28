@@ -44,6 +44,10 @@ tasks.withType(JavaCompile) {
     options.release.set(11)
 }
 
+tasks.withType(Copy).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
 tasks.register('shadowJar', Jar) {
     dependsOn configurations.runtimeClasspath
     archiveFileName = "runespeak-${version}.jar"
