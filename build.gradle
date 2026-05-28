@@ -44,8 +44,8 @@ tasks.withType(JavaCompile) {
     options.release.set(11)
 }
 
-tasks.whenTaskAdded { task ->
-    if (task.name == "runelitePluginHubPackage" && task instanceof Copy) {
+tasks.configureEach { task ->
+    if (task.name == "runelitePluginHubPackage") {
         task.duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
 }
