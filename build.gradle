@@ -31,6 +31,8 @@ dependencies {
         exclude group: 'com.microsoft.onnxruntime'
     }
 
+    implementation 'com.h2database:h2:2.1.212'
+
     runtimeOnly 'ch.qos.logback:logback-classic:1.5.16'
 
     testImplementation 'junit:junit:4.13.2'

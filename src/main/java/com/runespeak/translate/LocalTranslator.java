@@ -1,8 +1,9 @@
 package com.runespeak.translate;
 
 import com.runespeak.Language;
-import lombok.extern.slf4j.Slf4j;
 import com.runespeak.RuneSpeakConfig;
+import com.runespeak.data.TranslationDatabase;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 public class LocalTranslator {
     private final OnnxTranslationEngine engine;
     private final TranslationCache cache;
+    private final TranslationDatabase database;
     private final ExecutorService executor;
     private final ExecutorService loadExecutor;
     private final RuneSpeakConfig config;
@@ -25,8 +27,9 @@ public class LocalTranslator {
     private Language currentTarget = Language.SPANISH;
 
     @Inject
-    public LocalTranslator(RuneSpeakConfig config) {
+    public LocalTranslator(RuneSpeakConfig config, TranslationDatabase database) {
         this.config = config;
+        this.database = database;
 
         Path baseDir = resolveCacheDir();
 
@@ -140,6 +143,7 @@ public class LocalTranslator {
 
                 String result = engine.translate(text, srcCode, tgtCode).get(60, TimeUnit.SECONDS);
                 cache.put(text, result, srcCode, tgtCode);
+                database.store(text, result, srcCode, tgtCode);
                 return result;
             } catch (Exception e) {
                 log.error("Async translation failed for '{}': {}", truncate(text, 30), e.getMessage());

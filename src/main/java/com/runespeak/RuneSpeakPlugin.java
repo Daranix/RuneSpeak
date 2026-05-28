@@ -6,6 +6,8 @@ import com.runespeak.capture.DialogCapture;
 import com.runespeak.capture.MenuCapture;
 import com.runespeak.capture.OverlayTextCapture;
 import com.runespeak.capture.WidgetTextScanner;
+import com.runespeak.data.DataUploader;
+import com.runespeak.data.TranslationDatabase;
 import com.runespeak.overlay.TranslationOverlay;
 import com.runespeak.panel.RuneSpeakPanel;
 import com.runespeak.translate.LocalTranslator;
@@ -83,6 +85,12 @@ public class RuneSpeakPlugin extends Plugin {
 
     @Inject
     private ConfigManager configManager;
+
+    @Inject
+    private TranslationDatabase translationDatabase;
+
+    @Inject
+    private DataUploader dataUploader;
 
     private RuneSpeakPanel panel;
     private NavigationButton navButton;
@@ -408,6 +416,11 @@ public class RuneSpeakPlugin extends Plugin {
         widgetTextScanner.register(InterfaceID.ObjectboxDouble.PAUSEBUTTON, "ObjectboxDouble.PauseButton", RuneSpeakConfig::translateNpcDialogue);
         widgetTextScanner.register(InterfaceID.Objectbox.TEXT, "Objectbox.Text", RuneSpeakConfig::translateNpcDialogue);
 
+        translationDatabase.init(config);
+        if (config.anonymousDataSubmission()) {
+            dataUploader.start(config.getDataUploadUrl(), config.getDataUploadInterval());
+        }
+
         startModelLoading();
 
         log.info("RuneSpeak started!");
@@ -427,7 +440,9 @@ public class RuneSpeakPlugin extends Plugin {
             panel.shutdown();
         }
 
+        dataUploader.stop();
         translator.shutdown();
+        translationDatabase.shutdown();
 
         log.info("RuneSpeak stopped!");
     }
@@ -559,6 +574,15 @@ public class RuneSpeakPlugin extends Plugin {
         if (!"runespeak".equals(event.getGroup())) return;
 
         switch (event.getKey()) {
+            case "anonymousDataSubmission":
+            case "dataUploadUrl":
+            case "dataUploadInterval": {
+                dataUploader.stop();
+                if (config.anonymousDataSubmission()) {
+                    dataUploader.start(config.getDataUploadUrl(), config.getDataUploadInterval());
+                }
+                break;
+            }
             case "targetLanguage":
             case "sourceLanguage": {
                 Language source = config.getSourceLanguage();

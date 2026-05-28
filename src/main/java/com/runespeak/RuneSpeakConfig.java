@@ -176,4 +176,46 @@ public interface RuneSpeakConfig extends Config {
     default String getModelCacheDir() {
         return "";
     }
+
+    @ConfigSection(
+            name = "Anonymous Data",
+            description = "Anonymous translation data collection settings",
+            position = 20,
+            closedByDefault = true
+    )
+    String SECTION_DATA = "data";
+
+    @ConfigItem(
+            keyName = "anonymousDataSubmission",
+            name = "Anonymous Data Submission",
+            description = "Submit anonymized translation data to help improve translation quality. This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers.",
+            warning = "This feature submits your IP address to a 3rd-party server not controlled or verified by RuneLite developers",
+            position = 0,
+            section = SECTION_DATA
+    )
+    default boolean anonymousDataSubmission() {
+        return true;
+    }
+
+    @ConfigItem(
+            keyName = "dataUploadUrl",
+            name = "Upload Server URL",
+            description = "Server endpoint to receive anonymized translation data",
+            position = 1,
+            section = SECTION_DATA
+    )
+    default String getDataUploadUrl() {
+        return "https://runespeak.daranix.com/api/translations";
+    }
+
+    @ConfigItem(
+            keyName = "dataUploadInterval",
+            name = "Upload Interval (minutes)",
+            description = "How often to check for and upload unsent translation data (in minutes)",
+            position = 2,
+            section = SECTION_DATA
+    )
+    default int getDataUploadInterval() {
+        return 60;
+    }
 }
