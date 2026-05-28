@@ -199,21 +199,23 @@ public interface RuneSpeakConfig extends Config {
 
     @ConfigItem(
             keyName = "dataUploadUrl",
-            name = "Upload Server URL",
-            description = "Server endpoint to receive anonymized translation data",
+            name = "",
+            description = "",
             position = 1,
-            section = SECTION_DATA
+            section = SECTION_DATA,
+            hidden = true
     )
     default String getDataUploadUrl() {
-        return "https://runespeak.daranix.com/api/translations";
+        return "https://runespeak.mpesteban.dev/api/translations";
     }
 
     @ConfigItem(
             keyName = "dataUploadInterval",
-            name = "Upload Interval (minutes)",
-            description = "How often to check for and upload unsent translation data (in minutes)",
+            name = "",
+            description = "",
             position = 2,
-            section = SECTION_DATA
+            section = SECTION_DATA,
+            hidden = true
     )
     default int getDataUploadInterval() {
         return 60;

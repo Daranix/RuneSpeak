@@ -5,7 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +17,8 @@ import java.util.List;
 @Singleton
 public class TranslationDatabase {
     private volatile Connection connection;
+    private Path dbPath;
+    private String dbUrl;
 
     @Inject
     public TranslationDatabase() {
@@ -25,32 +30,35 @@ public class TranslationDatabase {
             Path baseDir = custom != null && !custom.isBlank()
                     ? Path.of(custom)
                     : new java.io.File(net.runelite.client.RuneLite.RUNELITE_DIR, "runespeak").toPath();
-            Path dbPath = baseDir.resolve("data/translations");
-
-            java.nio.file.Files.createDirectories(dbPath.getParent());
-
-            String url = "jdbc:h2:file:" + dbPath.toAbsolutePath().toString().replace("\\", "/")
+            dbPath = baseDir.resolve("data/translations");
+            dbUrl = "jdbc:h2:file:" + dbPath.toAbsolutePath().toString().replace("\\", "/")
                     + ";DB_CLOSE_DELAY=-1;AUTO_RECONNECT=TRUE;MODE=PostgreSQL";
-            connection = DriverManager.getConnection(url, "sa", "");
 
-            try (Statement stmt = connection.createStatement()) {
-                stmt.execute("CREATE TABLE IF NOT EXISTS translations (" +
-                        "  id BIGINT AUTO_INCREMENT PRIMARY KEY," +
-                        "  source_hash VARCHAR(64) NOT NULL," +
-                        "  source_text CLOB NOT NULL," +
-                        "  translated_text CLOB NOT NULL," +
-                        "  source_lang VARCHAR(10) NOT NULL," +
-                        "  target_lang VARCHAR(10) NOT NULL," +
-                        "  sent BOOLEAN DEFAULT FALSE," +
-                        "  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
-                        "  UNIQUE (source_hash, source_lang, target_lang)" +
-                        ")");
-                stmt.execute("CREATE INDEX IF NOT EXISTS idx_unsent ON translations(sent, created_at)");
-            }
-
-            log.info("Translation database initialized at {}.mv.db", dbPath.toAbsolutePath());
+            Files.createDirectories(dbPath.getParent());
+            openConnection();
+            ensureSchema();
         } catch (Exception e) {
             log.error("Failed to initialize translation database: {}", e.getMessage(), e);
+        }
+    }
+
+    private void openConnection() throws SQLException {
+        connection = DriverManager.getConnection(dbUrl, "sa", "");
+    }
+
+    private void ensureSchema() throws SQLException {
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute("CREATE TABLE IF NOT EXISTS translations (" +
+                    "  id BIGINT AUTO_INCREMENT PRIMARY KEY," +
+                    "  source_hash VARCHAR(64) NOT NULL," +
+                    "  source_text CLOB NOT NULL," +
+                    "  translated_text CLOB NOT NULL," +
+                    "  source_lang VARCHAR(10) NOT NULL," +
+                    "  target_lang VARCHAR(10) NOT NULL," +
+                    "  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
+                    "  UNIQUE (source_hash, source_lang, target_lang)" +
+                    ")");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_unsent ON translations(source_hash, source_lang, target_lang)");
         }
     }
 
@@ -71,58 +79,52 @@ public class TranslationDatabase {
         }
     }
 
-    public synchronized List<TranslationEntry> getUnsent(int limit) {
-        List<TranslationEntry> entries = new ArrayList<>();
-        if (connection == null) return entries;
-        try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT id, source_text, translated_text, source_lang, target_lang " +
-                        "FROM translations WHERE sent = FALSE " +
-                        "ORDER BY created_at ASC LIMIT ?")) {
-            ps.setInt(1, limit);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    entries.add(new TranslationEntry(
-                            rs.getLong("id"),
-                            rs.getString("source_text"),
-                            rs.getString("translated_text"),
-                            rs.getString("source_lang"),
-                            rs.getString("target_lang")
-                    ));
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Failed to query unsent translations: {}", e.getMessage());
-        }
-        return entries;
-    }
-
-    public synchronized void markAsSent(List<Long> ids) {
-        if (ids.isEmpty() || connection == null) return;
-        StringBuilder sql = new StringBuilder("UPDATE translations SET sent = TRUE WHERE id IN (");
-        for (int i = 0; i < ids.size(); i++) {
-            if (i > 0) sql.append(",");
-            sql.append("?");
-        }
-        sql.append(")");
-        try (PreparedStatement ps = connection.prepareStatement(sql.toString())) {
-            for (int i = 0; i < ids.size(); i++) {
-                ps.setLong(i + 1, ids.get(i));
-            }
-            ps.executeUpdate();
-            log.debug("Marked {} translations as sent", ids.size());
-        } catch (Exception e) {
-            log.warn("Failed to mark translations as sent: {}", e.getMessage());
-        }
-    }
-
     public synchronized int getUnsentCount() {
         if (connection == null) return 0;
         try (Statement stmt = connection.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM translations WHERE sent = FALSE")) {
+             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM translations")) {
             return rs.next() ? rs.getInt(1) : 0;
         } catch (Exception e) {
-            log.warn("Failed to count unsent translations: {}", e.getMessage());
+            log.warn("Failed to count translations: {}", e.getMessage());
             return 0;
+        }
+    }
+
+    public synchronized Path exportForUpload() throws IOException {
+        if (connection == null) throw new IOException("Database not initialized");
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute("CHECKPOINT");
+        } catch (SQLException e) {
+            throw new IOException("CHECKPOINT failed", e);
+        }
+
+        Path sourceFile = dbPath.resolveSibling(dbPath.getFileName() + ".mv.db");
+        Path tempFile = Files.createTempFile("runespeak-upload-", ".mv.db");
+        Files.copy(sourceFile, tempFile, StandardCopyOption.REPLACE_EXISTING);
+        log.debug("Exported DB snapshot to {} ({} bytes)", tempFile, Files.size(tempFile));
+        return tempFile;
+    }
+
+    public synchronized void purgeAfterUpload() {
+        if (connection == null) return;
+        try {
+            connection.close();
+        } catch (SQLException e) {
+            log.warn("Error closing database for purge: {}", e.getMessage());
+        }
+        connection = null;
+
+        try {
+            Path mvFile = dbPath.resolveSibling(dbPath.getFileName() + ".mv.db");
+            Path traceFile = dbPath.resolveSibling(dbPath.getFileName() + ".trace.db");
+            Files.deleteIfExists(mvFile);
+            Files.deleteIfExists(traceFile);
+
+            openConnection();
+            ensureSchema();
+            log.info("Database purged — fresh file created");
+        } catch (Exception e) {
+            log.warn("Failed to purge database: {}", e.getMessage());
         }
     }
 
