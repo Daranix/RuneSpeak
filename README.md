@@ -125,3 +125,7 @@ The long-term goal is to build a **crowdsourced translation improvement server**
 - Over time, the community converges on accurate, context-aware translations for OSRS-specific terminology
 
 This turns RuneSpeak from a solo tool into a collaborative system where the player base collectively refines the translation quality.
+
+## License
+
+BSD-2-Clause

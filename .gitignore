@@ -14,7 +14,6 @@ build/
 /nbproject/
 .DS_Store
 Thumbs.db
-runelite-plugin.properties
 .gradle-cli/
 .runespeak
 .atl
