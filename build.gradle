@@ -44,8 +44,10 @@ tasks.withType(JavaCompile) {
     options.release.set(11)
 }
 
-tasks.withType(Copy).configureEach {
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+tasks.whenTaskAdded { task ->
+    if (task.name == "runelitePluginHubPackage" && task instanceof Copy) {
+        task.duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
 }
 
 tasks.register('shadowJar', Jar) {
