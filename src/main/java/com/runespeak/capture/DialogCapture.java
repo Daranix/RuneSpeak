@@ -7,7 +7,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.api.gameval.InterfaceID;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -19,8 +19,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Slf4j
 @Singleton
 public class DialogCapture {
-    private static final int DIALOG_OPTION_WIDGET_ID = net.runelite.api.widgets.WidgetID.DIALOG_OPTION_GROUP_ID;
-
     private final Client client;
     private final RuneSpeakConfig config;
     private final LocalTranslator translator;
@@ -49,9 +47,9 @@ public class DialogCapture {
     public void checkAndTranslateDialog() {
         if (!config.translateNpcDialogue()) return;
 
-        Widget npcDialog    = client.getWidget(WidgetInfo.DIALOG_NPC_TEXT);
-        Widget playerDialog = client.getWidget(WidgetInfo.DIALOG_PLAYER_TEXT);
-        Widget spriteDialog = client.getWidget(WidgetInfo.DIALOG_SPRITE_TEXT);
+        Widget npcDialog    = client.getWidget(InterfaceID.ChatLeft.TEXT);
+        Widget playerDialog = client.getWidget(InterfaceID.ChatRight.TEXT);
+        Widget spriteDialog = client.getWidget(InterfaceID.Objectbox.TEXT);
 
         Widget activeDialog = null;
         if (npcDialog != null && !npcDialog.isHidden()) {
@@ -132,7 +130,7 @@ public class DialogCapture {
     private void translateDialogOptions() {
         // The "Select an Option" conversation choices live inside interface 219.
         // Component 1 holds the scrollable list; its dynamic children are the individual options.
-        Widget optionGroup = client.getWidget(DIALOG_OPTION_WIDGET_ID, 1);
+        Widget optionGroup = client.getWidget(InterfaceID.Chatmenu.OPTIONS);
         if (optionGroup == null || optionGroup.isHidden()) {
             // Option dialog went away — clear per-widget translation cache
             if (!optionTranslations.isEmpty()) {

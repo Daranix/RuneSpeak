@@ -25,12 +25,12 @@ public class LocalTranslator {
     private Language currentTarget = Language.SPANISH;
 
     @Inject
-    public LocalTranslator(RuneSpeakConfig config) {
+    public LocalTranslator(RuneSpeakConfig config, com.google.gson.Gson gson) {
         this.config = config;
 
         Path baseDir = resolveCacheDir();
 
-        this.engine = new OnnxTranslationEngine(baseDir);
+        this.engine = new OnnxTranslationEngine(baseDir, gson);
         this.cache = new TranslationCache(baseDir.resolve("cache"),
                 config.unlimitedCache() ? Integer.MAX_VALUE : config.getCacheSize());
         this.executor = Executors.newSingleThreadExecutor(r -> {

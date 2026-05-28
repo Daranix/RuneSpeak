@@ -27,9 +27,11 @@ public class OnnxTranslationEngine {
     private ModelRuntime runtime;
     private OrtEnvironment ortEnv;
     private Path modelsDir;
+    private final com.google.gson.Gson gson;
 
-    public OnnxTranslationEngine(Path runespeakDir) {
+    public OnnxTranslationEngine(Path runespeakDir, com.google.gson.Gson gson) {
         this.modelsDir = runespeakDir.resolve("models");
+        this.gson = gson;
     }
 
     public synchronized void setBaseDir(Path runespeakDir) {
@@ -102,7 +104,7 @@ public class OnnxTranslationEngine {
                 return;
             }
 
-            com.google.gson.Gson gson = new com.google.gson.Gson();
+            com.google.gson.Gson gson = this.gson;
             com.google.gson.JsonObject json = gson.fromJson(content, com.google.gson.JsonObject.class);
             boolean modified = false;
 
