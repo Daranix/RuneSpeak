@@ -79,7 +79,6 @@ tasks.register('runBenchmark', JavaExec) {
     dependsOn 'classes'
     classpath = sourceSets.main.runtimeClasspath + sourceSets.test.runtimeClasspath
     mainClass = 'com.runespeak.benchmark.TranslationBenchmark'
-    executable = 'D:\\DevEnv\\Java\\jdk-11\\bin\\java.exe'
     jvmArgs '-ea'
     if (project.hasProperty('cache')) {
         jvmArgs "-Drunespeak.cache=${project.cache}"
@@ -93,12 +92,10 @@ tasks.register('runRuneLite', JavaExec) {
 
     classpath = sourceSets.test.runtimeClasspath
     mainClass = pluginMainClass
-    executable = 'D:\\DevEnv\\Java\\jdk-11\\bin\\java.exe'
     args '--developer-mode', '--debug'
     jvmArgs '-ea'
     jvmArgs "-Djava.library.path=${configurations.runtimeClasspath.asPath}"
 }
 
 test {
-    executable = 'D:\\DevEnv\\Java\\jdk-11\\bin\\java.exe'
 }
