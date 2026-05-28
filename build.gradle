@@ -26,7 +26,7 @@ dependencies {
     compileOnly 'org.projectlombok:lombok:1.18.46'
     annotationProcessor 'org.projectlombok:lombok:1.18.46'
 
-    implementation 'com.microsoft.onnxruntime:onnxruntime:1.23.0'
+    implementation 'com.microsoft.onnxruntime:onnxruntime:1.17.1'
     implementation('ai.djl.huggingface:tokenizers:0.36.0') {
         exclude group: 'com.microsoft.onnxruntime'
     }
