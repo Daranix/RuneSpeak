@@ -67,6 +67,12 @@ afterEvaluate {
         task.exclude 'com/sun/jna/**/*.jnilib'
         task.exclude 'ai/djl/modality/audio/**'
         task.exclude 'ai/djl/Application$Audio.class'
+        task.exclude 'org/apache/commons/codec/cli/**'
+        task.exclude 'org/apache/commons/compress/archivers/Lister*'
+        task.exclude 'org/apache/commons/compress/archivers/sevenz/CLI*'
+        task.exclude 'org/apache/commons/compress/harmony/**'
+        task.exclude 'ai/djl/training/**'
+        task.exclude 'ai/djl/util/cuda/CudaUtils*'
     }
 }
 
@@ -106,6 +112,12 @@ tasks.register('shadowJar', Jar) {
     exclude 'com/sun/jna/**/*.jnilib'
     exclude 'ai/djl/modality/audio/**'
     exclude 'ai/djl/Application$Audio.class'
+    exclude 'org/apache/commons/codec/cli/**'
+    exclude 'org/apache/commons/compress/archivers/Lister*'
+    exclude 'org/apache/commons/compress/archivers/sevenz/CLI*'
+    exclude 'org/apache/commons/compress/harmony/**'
+    exclude 'ai/djl/training/**'
+    exclude 'ai/djl/util/cuda/CudaUtils*'
 }
 
 tasks.register('runBenchmark', JavaExec) {
