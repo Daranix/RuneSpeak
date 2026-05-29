@@ -16,10 +16,6 @@ repositories {
 def runeLiteVersion = 'latest.release'
 def pluginMainClass = 'com.runespeak.RuneSpeakPluginTest'
 
-// configurations.all {
-//     exclude group: 'com.microsoft.onnxruntime', module: 'onnxruntime'
-// }
-
 dependencies {
     compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
 
@@ -48,21 +44,27 @@ tasks.withType(JavaCompile) {
     options.release.set(11)
 }
 
+// The packager's init script creates runelitePluginHubPackage as a Copy/Jar task that merges
+// runtimeClasspath into a fat jar. Add exclude patterns to keep its output under 10MB by
+// stripping native libraries (the ORT Java classes alone are ~500KB — safe to include).
 afterEvaluate {
-    tasks.configureEach { task ->
-        if (task.name == "runelitePluginHubPackage") {
-            task.dependsOn shadowJar
-            task.duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-            task.doLast {
-                def pluginHubDir = layout.buildDirectory.dir("plugin-hub").get().asFile
-                pluginHubDir.mkdirs()
-                pluginHubDir.listFiles()?.each { it.delete() }
-                copy {
-                    from shadowJar.archiveFile.get().asFile
-                    into pluginHubDir
-                }
-            }
-        }
+    tasks.matching { it.name == "runelitePluginHubPackage" }.configureEach { task ->
+        task.dependsOn shadowJar
+        task.duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+        task.exclude '**/*.so'
+        task.exclude '**/*.dll'
+        task.exclude '**/*.dylib'
+        task.exclude '**/*.jnilib'
+        task.exclude '**/*.dSYM/**'
+        task.exclude '**/*.a'
+        task.exclude '**/*.pdb'
+        task.exclude 'ai/onnxruntime/native/**'
+        task.exclude 'native/lib/**'
+        task.exclude 'com/sun/jna/**/*.so'
+        task.exclude 'com/sun/jna/**/*.dll'
+        task.exclude 'com/sun/jna/**/*.dylib'
+        task.exclude 'com/sun/jna/**/*.jnilib'
     }
 }
 
@@ -93,6 +95,7 @@ tasks.register('shadowJar', Jar) {
     exclude '**/*.so'
     exclude '**/*.dll'
     exclude '**/*.dylib'
+    exclude '**/*.jnilib'
     exclude 'ai/onnxruntime/native/**'
     exclude 'native/lib/**'
     exclude 'com/sun/jna/**/*.so'
