@@ -1,6 +1,7 @@
 package com.runespeak.translate;
 
 import ai.onnxruntime.OrtEnvironment;
+import com.runespeak.NativeLibraryManager;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,10 +29,12 @@ public class OnnxTranslationEngine {
     private OrtEnvironment ortEnv;
     private Path modelsDir;
     private final com.google.gson.Gson gson;
+    private final NativeLibraryManager nativeLibs;
 
     public OnnxTranslationEngine(Path runespeakDir, com.google.gson.Gson gson) {
         this.modelsDir = runespeakDir.resolve("models");
         this.gson = gson;
+        this.nativeLibs = new NativeLibraryManager(runespeakDir);
     }
 
     public synchronized void setBaseDir(Path runespeakDir) {
@@ -70,6 +73,8 @@ public class OnnxTranslationEngine {
             Path tokenizerPath = modelPath.resolve("tokenizer.json");
             sanitizeTokenizerJson(tokenizerPath);
 
+            log.debug("Ensuring native libraries are loaded");
+            nativeLibs.ensure();
             log.debug("Creating OrtEnvironment");
             ortEnv = OrtEnvironment.getEnvironment();
             log.debug("OrtEnvironment created: {}", ortEnv);

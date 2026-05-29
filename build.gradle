@@ -71,10 +71,22 @@ tasks.register('shadowJar', Jar) {
     exclude 'META-INF/*.RSA'
     exclude '**/module-info.class'
 
-    // Preserve native libraries needed by ORT and DJL
-    filesMatching('**/*.so')    { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
-    filesMatching('**/*.dll')   { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
-    filesMatching('**/*.dylib') { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
+    // Strip debug symbols and static libs (unnecessary at runtime)
+    exclude '**/*.pdb'
+    exclude '**/*.dSYM/**'
+    exclude '**/*.a'
+
+    // Strip ALL native libraries — downloaded at runtime by NativeLibraryManager
+    // from Maven Central to support all platforms without bloating the JAR
+    exclude '**/*.so'
+    exclude '**/*.dll'
+    exclude '**/*.dylib'
+    exclude 'ai/onnxruntime/native/**'
+    exclude 'native/lib/**'
+    exclude 'com/sun/jna/**/*.so'
+    exclude 'com/sun/jna/**/*.dll'
+    exclude 'com/sun/jna/**/*.dylib'
+    exclude 'com/sun/jna/**/*.jnilib'
 }
 
 tasks.register('runBenchmark', JavaExec) {
