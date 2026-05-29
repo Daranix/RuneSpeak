@@ -16,11 +16,29 @@ import java.text.DecimalFormat;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Formatter;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 public class TranslationBenchmark {
 
+    private static final Logger LOG;
     private static final DecimalFormat FMT = new DecimalFormat("#,##0");
+
+    static {
+        LOG = Logger.getLogger(TranslationBenchmark.class.getName());
+        LOG.setUseParentHandlers(false);
+        ConsoleHandler handler = new ConsoleHandler();
+        handler.setFormatter(new Formatter() {
+            @Override
+            public String format(LogRecord r) {
+                return r.getMessage() + System.lineSeparator();
+            }
+        });
+        LOG.addHandler(handler);
+    }
 
     private static final String[][] TEST_PHRASES = {
             {"eng_Latn", "spa_Latn", "Cancel"},
@@ -42,7 +60,7 @@ public class TranslationBenchmark {
             try {
                 ortEnvField = OrtEnvironment.getEnvironment();
             } catch (UnsatisfiedLinkError e) {
-                System.err.println("WARN: ONNX Runtime native lib unavailable: " + e.getMessage());
+                LOG.warning("WARN: ONNX Runtime native lib unavailable: " + e.getMessage());
             }
         }
         return ortEnvField;
@@ -78,9 +96,9 @@ public class TranslationBenchmark {
 
     public static void main(String[] args) throws Exception {
         System.setProperty("onnxruntime.native.path", "C:\\Users\\Daranix\\.gemini\\antigravity-ide\\brain\\e70147b7-9091-4de9-85e9-b4401d7b1bfb\\scratch\\ort_cpu_libs");
-        System.out.println("System property onnxruntime.native.path set to: " + System.getProperty("onnxruntime.native.path"));
-        System.out.println("=== Running TranslationBenchmark in CPU Mode ===");
-        System.out.println("====================================\n");
+        LOG.info("System property onnxruntime.native.path set to: " + System.getProperty("onnxruntime.native.path"));
+        LOG.info("=== Running TranslationBenchmark in CPU Mode ===");
+        LOG.info("====================================\n");
 
         String cacheRoot = System.getProperty("runespeak.cache",
                 Paths.get(System.getProperty("user.home"), ".runespeak").toString());
@@ -88,12 +106,12 @@ public class TranslationBenchmark {
 
         String[] modelsToBench = args.length > 0 ? args : DEFAULT_MODELS;
 
-        System.out.println("=== RuneSpeak Translation Benchmark ===");
-        System.out.println("Cache dir: " + modelsDir.toAbsolutePath());
-        System.out.println("Models: " + String.join(", ", modelsToBench));
-        System.out.println("Phrases: " + TEST_PHRASES.length);
-        System.out.println("Per-phrase timeout: " + PER_PHRASE_TIMEOUT_MS + "ms");
-        System.out.println();
+        LOG.info("=== RuneSpeak Translation Benchmark ===");
+        LOG.info("Cache dir: " + modelsDir.toAbsolutePath());
+        LOG.info("Models: " + String.join(", ", modelsToBench));
+        LOG.info("Phrases: " + TEST_PHRASES.length);
+        LOG.info("Per-phrase timeout: " + PER_PHRASE_TIMEOUT_MS + "ms");
+        LOG.info("");
 
         List<ModelReport> reports = new ArrayList<>();
         for (String modelId : modelsToBench) {
@@ -108,9 +126,9 @@ public class TranslationBenchmark {
 
 
     static ModelReport benchmarkModel(String modelId) {
-        System.out.println("━".repeat(70));
-        System.out.println("MODEL: " + modelId);
-        System.out.println("━".repeat(70));
+        LOG.info("━".repeat(70));
+        LOG.info("MODEL: " + modelId);
+        LOG.info("━".repeat(70));
 
         ModelReport report = new ModelReport();
         report.modelId = modelId;
@@ -119,32 +137,32 @@ public class TranslationBenchmark {
         try {
             runtime = ModelRuntime.forModelId(modelId);
             report.runtimeType = runtime.getClass().getSimpleName();
-            System.out.println("Runtime: " + report.runtimeType);
+            LOG.info("Runtime: " + report.runtimeType);
 
             Path modelPath = modelsDir.resolve(sanitizeModelId(modelId));
             Files.createDirectories(modelPath);
 
             long totalSize = downloadIfMissing(modelPath, runtime);
             report.sizeInfo = totalSize > 0 ? humanSize(totalSize) : "cached";
-            System.out.println("Model size: " + report.sizeInfo);
+            LOG.info("Model size: " + report.sizeInfo);
 
             long t0 = System.currentTimeMillis();
             runtime.load(modelPath, ortEnv());
             long t1 = System.currentTimeMillis();
             report.loadTimeMs = t1 - t0;
             report.loadFailed = false;
-            System.out.println("Load time: " + FMT.format(report.loadTimeMs) + "ms");
-            System.out.println();
+            LOG.info("Load time: " + FMT.format(report.loadTimeMs) + "ms");
+            LOG.info("");
         } catch (Exception e) {
             report.loadFailed = true;
             report.loadError = e.getClass().getSimpleName() + ": " + e.getMessage();
-            System.out.println("LOAD FAILED: " + report.loadError);
-            System.out.println();
+            LOG.info("LOAD FAILED: " + report.loadError);
+            LOG.info("");
             return report;
         }
 
-        System.out.printf("%-25s %-40s %8s  %s%n", "PHRASE", "TRANSLATION", "TIME", "CHECKS");
-        System.out.println("-".repeat(90));
+        LOG.info(String.format("%-25s %-40s %8s  %s", "PHRASE", "TRANSLATION", "TIME", "CHECKS"));
+        LOG.info("-".repeat(90));
 
         for (String[] phrase : TEST_PHRASES) {
             String srcLang = phrase[0];
@@ -179,7 +197,7 @@ public class TranslationBenchmark {
         }
 
         runtime.shutdown();
-        System.out.println();
+        LOG.info("");
         return report;
     }
 
@@ -227,27 +245,27 @@ public class TranslationBenchmark {
         String time = res.timedOut ? " TIMEOUT" : FMT.format(res.timeMs) + "ms";
         String checks = res.warnings.isEmpty() ? "OK" : String.join(", ", res.warnings);
 
-        System.out.printf("%-25s %-40s %8s  %s%n",
+        LOG.info(String.format("%-25s %-40s %8s  %s",
                 truncate(res.phrase, 24),
                 truncate(display, 39),
                 time,
-                checks);
+                checks));
     }
 
     static void printSummary(List<ModelReport> reports) {
-        System.out.println();
-        System.out.println("=".repeat(70));
-        System.out.println("SUMMARY");
-        System.out.println("=".repeat(70));
+        LOG.info("");
+        LOG.info("=".repeat(70));
+        LOG.info("SUMMARY");
+        LOG.info("=".repeat(70));
 
-        System.out.printf("%-40s %-12s %-10s %-8s %-8s %s%n",
-                "MODEL", "RUNTIME", "LOAD", "PASS", "FAIL", "WARN");
-        System.out.println("-".repeat(90));
+        LOG.info(String.format("%-40s %-12s %-10s %-8s %-8s %s",
+                "MODEL", "RUNTIME", "LOAD", "PASS", "FAIL", "WARN"));
+        LOG.info("-".repeat(90));
 
         for (ModelReport r : reports) {
             if (r.loadFailed) {
-                System.out.printf("%-40s %-12s %-10s %-8s %-8s %s%n",
-                        r.modelId, r.runtimeType, "FAILED", "-", "-", r.loadError);
+                LOG.info(String.format("%-40s %-12s %-10s %-8s %-8s %s",
+                        r.modelId, r.runtimeType, "FAILED", "-", "-", r.loadError));
                 continue;
             }
 
@@ -255,20 +273,20 @@ public class TranslationBenchmark {
             long fail = r.results.stream().filter(res -> res.failed || res.timedOut).count();
             long warn = r.results.size() - pass - fail;
 
-            System.out.printf("%-40s %-12s %-10s %-8s %-8s %s%n",
+            LOG.info(String.format("%-40s %-12s %-10s %-8s %-8s %s",
                     r.modelId, r.runtimeType, FMT.format(r.loadTimeMs) + "ms",
-                    pass + "/" + r.results.size(), fail, warn);
+                    pass + "/" + r.results.size(), fail, warn));
         }
 
-        System.out.println();
-        System.out.println("WARNINGS LEGEND:");
-        System.out.println("  UNCHANGED     — output equals input (no translation applied)");
-        System.out.println("  EMPTY         — output is blank");
-        System.out.println("  HAS_HTML      — output contains HTML/color tags");
-        System.out.println("  HAS_CHINESE   — output contains Chinese characters");
-        System.out.println("  TOO_LONG      — output is disproportionately longer than input");
-        System.out.println("  HAS_EXPLANATION — model output explanations instead of translating");
-        System.out.println("  DEFINITION    — model asked 'what is X?' instead of translating");
+        LOG.info("");
+        LOG.info("WARNINGS LEGEND:");
+        LOG.info("  UNCHANGED     — output equals input (no translation applied)");
+        LOG.info("  EMPTY         — output is blank");
+        LOG.info("  HAS_HTML      — output contains HTML/color tags");
+        LOG.info("  HAS_CHINESE   — output contains Chinese characters");
+        LOG.info("  TOO_LONG      — output is disproportionately longer than input");
+        LOG.info("  HAS_EXPLANATION — model outputs explanation instead of translating");
+        LOG.info("  DEFINITION    — model asked 'what is X?' instead of translating");
     }
 
     static long downloadIfMissing(Path modelPath, ModelRuntime runtime) throws IOException {
@@ -282,7 +300,7 @@ public class TranslationBenchmark {
             }
 
             String url = file.getDownloadUrl(runtime.getModelId());
-            System.out.println("  Downloading " + file.getLocalFilename() + "...");
+            LOG.info("  Downloading " + file.getLocalFilename() + "...");
             Path tmp = filePath.resolveSibling(filePath.getFileName() + ".tmp");
             try (ReadableByteChannel in = Channels.newChannel(new URL(url).openStream());
                  FileOutputStream out = new FileOutputStream(tmp.toFile())) {
@@ -291,7 +309,7 @@ public class TranslationBenchmark {
             Files.move(tmp, filePath, StandardCopyOption.REPLACE_EXISTING);
             long sz = Files.size(filePath);
             total += sz;
-            System.out.println("    " + humanSize(sz) + " — done");
+            LOG.info("    " + humanSize(sz) + " — done");
         }
         return total;
     }
