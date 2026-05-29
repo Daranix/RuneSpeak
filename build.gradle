@@ -1,6 +1,5 @@
 plugins {
     id 'java'
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 repositories {
@@ -49,16 +48,35 @@ tasks.withType(JavaCompile) {
     options.release.set(11)
 }
 
-tasks.configureEach { task ->
-    if (task.name == "runelitePluginHubPackage") {
-        task.duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+afterEvaluate {
+    tasks.configureEach { task ->
+        if (task.name == "runelitePluginHubPackage") {
+            task.dependsOn shadowJar
+            task.doFirst {
+                delete task.outputs.files
+            }
+            task.doLast {
+                def src = shadowJar.archiveFile.get().asFile
+                def dest = file("${buildDir}/plugin-hub/${shadowJar.archiveFileName.get()}")
+                dest.parentFile.mkdirs()
+                src.copyTo(dest, true)
+            }
+        }
     }
 }
 
-shadowJar {
+tasks.register('shadowJar', Jar) {
+    dependsOn configurations.runtimeClasspath
     archiveFileName = "runespeak-${version}.jar"
     manifest {
         attributes('Main-Class': pluginMainClass, 'Multi-Release': true)
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from sourceSets.main.output
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
     }
 
     exclude 'META-INF/INDEX.LIST'
