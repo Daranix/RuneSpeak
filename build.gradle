@@ -52,14 +52,15 @@ afterEvaluate {
     tasks.configureEach { task ->
         if (task.name == "runelitePluginHubPackage") {
             task.dependsOn shadowJar
-            task.doFirst {
-                delete task.outputs.files
-            }
+            task.duplicatesStrategy = DuplicatesStrategy.EXCLUDE
             task.doLast {
-                def src = shadowJar.archiveFile.get().asFile
-                def dest = file("${buildDir}/plugin-hub/${shadowJar.archiveFileName.get()}")
-                dest.parentFile.mkdirs()
-                src.copyTo(dest, true)
+                def pluginHubDir = layout.buildDirectory.dir("plugin-hub").get().asFile
+                pluginHubDir.mkdirs()
+                pluginHubDir.listFiles()?.each { it.delete() }
+                copy {
+                    from shadowJar.archiveFile.get().asFile
+                    into pluginHubDir
+                }
             }
         }
     }
