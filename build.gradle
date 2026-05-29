@@ -65,6 +65,8 @@ afterEvaluate {
         task.exclude 'com/sun/jna/**/*.dll'
         task.exclude 'com/sun/jna/**/*.dylib'
         task.exclude 'com/sun/jna/**/*.jnilib'
+        task.exclude 'ai/djl/modality/audio/**'
+        task.exclude 'ai/djl/Application$Audio.class'
     }
 }
 
@@ -102,6 +104,8 @@ tasks.register('shadowJar', Jar) {
     exclude 'com/sun/jna/**/*.dll'
     exclude 'com/sun/jna/**/*.dylib'
     exclude 'com/sun/jna/**/*.jnilib'
+    exclude 'ai/djl/modality/audio/**'
+    exclude 'ai/djl/Application$Audio.class'
 }
 
 tasks.register('runBenchmark', JavaExec) {
