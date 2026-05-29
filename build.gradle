@@ -34,6 +34,10 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
     testImplementation group: 'net.runelite', name: 'jshell', version: runeLiteVersion
+
+    // logback 1.5.x supports SLF4J 2.x (required by tokenizers -> ai.djl -> slf4j-api:2.0.17)
+    // Overrides RuneLite's logback 1.2.9 which only supports SLF4J 1.7.x
+    testRuntimeOnly 'ch.qos.logback:logback-classic:1.5.13'
 }
 
 group = 'com.runespeak'
