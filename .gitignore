@@ -1,5 +1,6 @@
 .gradle/
-build/
+/build/
+buildSrc/build/
 *.class
 *.jar
 *.log

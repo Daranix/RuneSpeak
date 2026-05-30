@@ -73,6 +73,11 @@ afterEvaluate {
         task.exclude 'org/apache/commons/compress/harmony/**'
         task.exclude 'ai/djl/training/**'
         task.exclude 'ai/djl/util/cuda/CudaUtils*'
+
+        task.doLast {
+            logger.lifecycle("Patching jar: redirecting System.out/err/in to _NoOp...")
+            com.runespeak.build.SystemOutPatcher.patchJar(task.archiveFile.get().asFile.toPath())
+        }
     }
 }
 
@@ -118,6 +123,11 @@ tasks.register('shadowJar', Jar) {
     exclude 'org/apache/commons/compress/harmony/**'
     exclude 'ai/djl/training/**'
     exclude 'ai/djl/util/cuda/CudaUtils*'
+
+    doLast {
+        logger.lifecycle("Patching jar: redirecting System.out/err/in to _NoOp...")
+        com.runespeak.build.SystemOutPatcher.patchJar(archiveFile.get().asFile.toPath())
+    }
 }
 
 tasks.register('runBenchmark', JavaExec) {
