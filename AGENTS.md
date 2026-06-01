@@ -162,6 +162,21 @@ New high-end PvM boss plugins are not accepted as a blanket policy.
 - No adult or overtly sexual content
 - No plugins that use player-provided IDs for their entire functionality (causes moderation issues)
 
+## Python Debug Scripts
+
+The `scripts/` directory contains Python scripts for debugging and verifying the ONNX runtime against Python baselines. Run with `uv run python scripts/<script>.py` from the project root.
+
+| Script | Purpose |
+|--------|---------|
+| `run_onnx.py` | Compare Java decoder layer outputs against ONNX Runtime (used to diagnose weight mismatches) |
+| `compare_hf_output.py` | Compare Java output against HuggingFace PyTorch model |
+| `debug_embed.py` | Debug embedding + position encoding computation |
+| `ort_baseline.py` | Establish ONNX Runtime baseline for translation quality |
+| `check_translations.py` | Verify expected model outputs for a set of test inputs |
+| `compare_tokenizer.py` | Compare BPE/Unigram tokenizer behavior against Python |
+| `check_tokenizer.py` | Check tokenizer output alignment with HuggingFace |
+| `check_onnx_shapes.py` | Inspect ONNX weight shapes and model graph structure |
+
 ## Shell & Agent Interaction
 
 - In PowerShell, NEVER use `2>&1` before piping to `Select-String` — it corrupts binary stream output and causes infinite hangs. Pipe stdout only, or use `2>&1 | Out-Null` then a separate command.
