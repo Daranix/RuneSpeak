@@ -49,8 +49,15 @@ public class BpeTokenizer {
         this(Files.readString(tokenizerJsonPath, StandardCharsets.UTF_8));
     }
 
+    public BpeTokenizer(Gson gson, Path tokenizerJsonPath) throws IOException {
+        this(gson, Files.readString(tokenizerJsonPath, StandardCharsets.UTF_8));
+    }
+
     public BpeTokenizer(String jsonContent) {
-        Gson gson = new Gson();
+        this(new Gson(), jsonContent);
+    }
+
+    public BpeTokenizer(Gson gson, String jsonContent) {
         JsonObject root = gson.fromJson(jsonContent, JsonObject.class);
 
         this.vocab = new HashMap<>();

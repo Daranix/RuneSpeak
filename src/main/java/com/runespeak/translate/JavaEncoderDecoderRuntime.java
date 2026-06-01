@@ -1,5 +1,6 @@
 package com.runespeak.translate;
 
+import com.google.gson.Gson;
 import com.runespeak.translate.tensor.Tensor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class JavaEncoderDecoderRuntime implements ModelRuntime {
 
     private final String modelId;
+    private final Gson gson;
     @Getter
     private volatile boolean loaded = false;
     @Getter
@@ -67,7 +69,12 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
     private static final float REPETITION_PENALTY = 1.2f;
 
     public JavaEncoderDecoderRuntime(String modelId) {
+        this(modelId, new Gson());
+    }
+
+    public JavaEncoderDecoderRuntime(String modelId, Gson gson) {
         this.modelId = modelId;
+        this.gson = gson;
     }
 
     @Override
@@ -106,7 +113,7 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
             log.debug("Decoder weights: {}", decoderWeights.keySet());
 
             Path tokenizerPath = modelPath.resolve("tokenizer.json");
-            this.tokenizer = new BpeTokenizer(tokenizerPath);
+            this.tokenizer = new BpeTokenizer(gson, tokenizerPath);
             log.info("Tokenizer loaded, vocab size: {}", tokenizer.getVocabSize());
 
             Path configPath = modelPath.resolve("config.json");

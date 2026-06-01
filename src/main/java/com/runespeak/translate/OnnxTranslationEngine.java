@@ -57,7 +57,7 @@ public class OnnxTranslationEngine {
             Files.createDirectories(modelsDir);
             Path modelPath = modelsDir.resolve(sanitizeModelId(modelId));
 
-            ModelRuntime newRuntime = ModelRuntime.forModelId(modelId);
+            ModelRuntime newRuntime = ModelRuntime.forModelId(modelId, gson);
 
             for (DownloadFile file : newRuntime.getRequiredFiles()) {
                 downloadIfMissing(modelId, modelPath, file);

@@ -1,5 +1,7 @@
 package com.runespeak.translate;
 
+import com.google.gson.Gson;
+
 public class EncoderDecoderRuntimeProvider implements ModelRuntimeProvider {
     @Override
     public boolean supports(String modelId) {
@@ -9,7 +11,7 @@ public class EncoderDecoderRuntimeProvider implements ModelRuntimeProvider {
     }
 
     @Override
-    public ModelRuntime create(String modelId) {
-        return new JavaEncoderDecoderRuntime(modelId);
+    public ModelRuntime create(String modelId, Gson gson) {
+        return new JavaEncoderDecoderRuntime(modelId, gson);
     }
 }

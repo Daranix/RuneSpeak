@@ -1,5 +1,6 @@
 package com.runespeak.translate;
 
+import com.google.gson.Gson;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -17,13 +18,13 @@ public interface ModelRuntime {
     boolean isLoading();
     String getCurrentModelId();
 
-    static ModelRuntime forModelId(String modelId) {
+    static ModelRuntime forModelId(String modelId, Gson gson) {
         if (modelId == null) {
             throw new IllegalArgumentException("Model ID must not be null");
         }
         for (ModelRuntimeProvider provider : PROVIDERS) {
             if (provider.supports(modelId)) {
-                return provider.create(modelId);
+                return provider.create(modelId, gson);
             }
         }
         throw new IllegalArgumentException("No runtime provider for model: " + modelId);
