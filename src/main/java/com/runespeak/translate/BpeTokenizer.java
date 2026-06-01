@@ -45,16 +45,8 @@ public class BpeTokenizer {
         }
     }
 
-    public BpeTokenizer(Path tokenizerJsonPath) throws IOException {
-        this(Files.readString(tokenizerJsonPath, StandardCharsets.UTF_8));
-    }
-
     public BpeTokenizer(Gson gson, Path tokenizerJsonPath) throws IOException {
         this(gson, Files.readString(tokenizerJsonPath, StandardCharsets.UTF_8));
-    }
-
-    public BpeTokenizer(String jsonContent) {
-        this(new Gson(), jsonContent);
     }
 
     public BpeTokenizer(Gson gson, String jsonContent) {

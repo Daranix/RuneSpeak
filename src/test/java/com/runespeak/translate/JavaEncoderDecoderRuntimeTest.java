@@ -1,5 +1,6 @@
 package com.runespeak.translate;
 
+import com.google.gson.Gson;
 import org.junit.Test;
 
 import java.io.FileOutputStream;
@@ -120,7 +121,7 @@ public class JavaEncoderDecoderRuntimeTest {
 
         System.out.println("Model cache path: " + modelPath);
 
-        JavaEncoderDecoderRuntime runtime = new JavaEncoderDecoderRuntime(modelId);
+        JavaEncoderDecoderRuntime runtime = new JavaEncoderDecoderRuntime(modelId, new Gson());
 
         for (DownloadFile file : runtime.getRequiredFiles()) {
             downloadIfMissing(modelId, modelPath, file);

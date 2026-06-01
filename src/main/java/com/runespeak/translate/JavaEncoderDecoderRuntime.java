@@ -68,10 +68,6 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
     private static final int MAX_INPUT_TOKENS = 128;
     private static final float REPETITION_PENALTY = 1.2f;
 
-    public JavaEncoderDecoderRuntime(String modelId) {
-        this(modelId, new Gson());
-    }
-
     public JavaEncoderDecoderRuntime(String modelId, Gson gson) {
         this.modelId = modelId;
         this.gson = gson;
