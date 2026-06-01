@@ -117,15 +117,17 @@ public class Tensor {
         if (shape[1] != other.shape[0]) throw new IllegalArgumentException("Matrix dim mismatch: " + shape[1] + " vs " + other.shape[0]);
         int m = shape[0], n = shape[1], p = other.shape[1];
         float[] r = new float[m * p];
+        // Use i-k-j loop order for better cache behavior (sequential inner loop over p)
         for (int i = 0; i < m; i++) {
             int rowBase = i * n;
             int rBase = i * p;
-            for (int j = 0; j < p; j++) {
-                float sum = 0;
-                for (int k = 0; k < n; k++) {
-                    sum += data[rowBase + k] * other.data[k * p + j];
+            for (int k = 0; k < n; k++) {
+                float a = data[rowBase + k];
+                if (a == 0.0f) continue;
+                int otherBase = k * p;
+                for (int j = 0; j < p; j++) {
+                    r[rBase + j] += a * other.data[otherBase + j];
                 }
-                r[rBase + j] = sum;
             }
         }
         return new Tensor(r, new int[]{m, p});

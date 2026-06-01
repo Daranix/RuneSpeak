@@ -25,9 +25,18 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
     private Map<String, Tensor> encoderWeights;
     private Map<String, Tensor> decoderWeights;
 
+    private static final boolean VERBOSE = "true".equals(System.getProperty("runespeak.verbose"));
+
+    private void vlog(String format, Object... args) {
+        if (VERBOSE) log.info(format, args);
+    }
+
     private int decoderStartTokenId;
     private int eosTokenId;
     private int maxLength = 128;
+
+    // Cached transposed LM head (transpose once, not every step)
+    private Tensor lmHeadWeightT;
 
     // Stored prev hidden state for step-over-step cosine similarity
     private Tensor prevHiddenState;
@@ -54,6 +63,8 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
     private static final int FFN_DIM = 2048;
     private static final int NUM_LAYERS = 6;
     private static final float SCALE = (float) Math.sqrt(D_MODEL);
+    private static final int MAX_INPUT_TOKENS = 128;
+    private static final float REPETITION_PENALTY = 1.2f;
 
     public JavaEncoderDecoderRuntime(String modelId) {
         this.modelId = modelId;
@@ -109,10 +120,20 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                 eosTokenId = 1;
                 maxLength = 30;
             }
-            if (maxLength > 30) maxLength = 30;
+            if (maxLength > 200) maxLength = 200;
 
             // Patch zero embeddings: if decoder_start_token_id row is all zeros, copy EOS embedding
             patchZeroEmbeddings(decoderStartTokenId, eosTokenId);
+
+            // Cache transposed LM head (avoids 133MB copy per decoder step)
+            Tensor lmHead = findWeightAny(decoderWeights, "lm_head.weight", "model.lm_head.weight", "model.shared.weight");
+            if (lmHead == null) {
+                lmHead = findWeightAny(encoderWeights, "shared.weight", "model.encoder.embed_tokens.weight");
+            }
+            if (lmHead == null) {
+                lmHead = findWeightAny(decoderWeights, "shared.weight", "model.decoder.embed_tokens.weight");
+            }
+            lmHeadWeightT = lmHead != null ? lmHead.transpose() : null;
 
             this.loaded = true;
             log.info("JavaEncoderDecoder loaded: {} (start={}, eos={}, max={})",
@@ -152,6 +173,14 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
         int[] inputIds = tokenizer.encode(text);
         if (inputIds.length == 0) return text;
 
+        // Truncate very long inputs to prevent quality degradation and excessive latency
+        if (inputIds.length > MAX_INPUT_TOKENS) {
+            int[] truncated = new int[MAX_INPUT_TOKENS];
+            System.arraycopy(inputIds, 0, truncated, 0, MAX_INPUT_TOKENS);
+            inputIds = truncated;
+            log.debug("Truncated input from {} to {} tokens", inputIds.length > MAX_INPUT_TOKENS ? "?" : "", MAX_INPUT_TOKENS);
+        }
+
         // Append EOS token (</s>) to encoder input, matching HuggingFace convention
         long[] inputLongs = new long[inputIds.length + 1];
         for (int i = 0; i < inputIds.length; i++) inputLongs[i] = inputIds[i];
@@ -167,6 +196,16 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
         for (int i = 0; i < maxLength; i++) {
             long[] decoderInput = outputTokenIds.stream().mapToLong(l -> l).toArray();
             float[] logits = decoderForward(decoderInput, encoderHidden);
+
+            // Apply repetition penalty: discourage the model from reusing previously generated tokens
+            if (REPETITION_PENALTY != 1.0f && !outputTokenIds.isEmpty()) {
+                for (long prevId : outputTokenIds) {
+                    int idx = (int) prevId;
+                    if (idx >= 0 && idx < logits.length) {
+                        logits[idx] /= REPETITION_PENALTY;
+                    }
+                }
+            }
 
             int nextToken = argmax(logits);
             if (i < 5 || nextToken == eosTokenId) {
@@ -213,7 +252,7 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
             hidden = encoderLayer(hidden, layer);
             float[] hdA = hidden.data();
             float nA = 0; for (float v : hdA) nA += v * v;
-            log.info("  encoder layer {}: ||hidden|| {} -> {}", layer,
+            vlog("  encoder layer {}: ||hidden|| {} -> {}", layer,
                 String.format("%.0f", Math.sqrt(nB / seqLen)), String.format("%.0f", Math.sqrt(nA / seqLen)));
         }
 
@@ -225,12 +264,12 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
             for (int j = 0; j < D_MODEL; j++) pn += encOut[p * D_MODEL + j] * encOut[p * D_MODEL + j];
             eoInfo.append(String.format(" %.0f", Math.sqrt(pn)));
         }
-        log.info(eoInfo.toString());
+        vlog(eoInfo.toString());
         StringBuilder eiInfo = new StringBuilder("  encoder per-pos ||input||:");
         for (int p = 0; p < seqLen; p++) {
             eiInfo.append(String.format(" %.0f", encInputNormByPos[p]));
         }
-        log.info(eiInfo.toString());
+        vlog(eiInfo.toString());
 
         float[] out = new float[seqLen * D_MODEL];
         for (int i = 0; i < seqLen; i++) {
@@ -340,7 +379,7 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
             float[] hd0 = hidden.data();
             float n0 = 0;
             for (float v : hd0) n0 += v * v;
-            log.info(String.format("  step=%d INPUT before layers: ||H||=%.1f H[0..4]=[%.2f,%.2f,%.2f,%.2f,%.2f]",
+            vlog(String.format("  step=%d INPUT before layers: ||H||=%.1f H[0..4]=[%.2f,%.2f,%.2f,%.2f,%.2f]",
                 kvCache.step, (float)Math.sqrt(n0), hd0[0], hd0[1], hd0[2], hd0[3], hd0[4]));
         }
 
@@ -350,11 +389,11 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                 float peNorm=0, peFirst=posEmbed.get(0,0);
                 for (float v : posEmbed.data()) peNorm += v*v;
                 peNorm = (float)Math.sqrt(peNorm);
-                log.info("  posEmbed shape=[{},{}] ||W||_F={} pe[0][0]={} pe[1][0]={}",
+                vlog("  posEmbed shape=[{},{}] ||W||_F={} pe[0][0]={} pe[1][0]={}",
                     posEmbed.shape()[0], posEmbed.shape()[1], String.format("%.1f", peNorm),
                     String.format("%.3f", peFirst), posEmbed.shape()[0] > 1 ? String.format("%.3f", posEmbed.get(1,0)) : "N/A");
             } else {
-                log.info("  posEmbed is NULL");
+                vlog("  posEmbed is NULL");
             }
             // Log embedding row norms for various tokens
             Tensor sw = findWeightAny("model.shared.weight", "shared.weight");
@@ -366,9 +405,9 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                         eb.append(String.format(" [%d]=%.4f", tid, (float)Math.sqrt(rn)));
                     }
                 }
-                log.info(eb.toString());
+                vlog(eb.toString());
                 // Check if shared.weight row count actually includes 65000
-                log.info("  shared.weight shape=[{},{}], first val={}, last val={}",
+                vlog("  shared.weight shape=[{},{}], first val={}, last val={}",
                     sw.shape()[0], sw.shape()[1], sw.get(0,0), sw.get(sw.shape()[0]-1, 0));
             }
             // Log encoder output norm
@@ -392,7 +431,7 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                 encInfo.append(String.format(" %.0f", Math.sqrt(ePosNorm)));
                 vInfo.append(String.format(" %.0f", Math.sqrt(vPosNorm)));
             }
-            log.info(encInfo.toString());
+            vlog(encInfo.toString());
             // Encoder cosine similarity: compare position 0 vs others
             StringBuilder encSim = new StringBuilder("  encoder per-pos E[0]·E[p] sim:");
             float e0n = 0; for (int j = 0; j < dModel; j++) e0n += encD[j] * encD[j];
@@ -406,8 +445,8 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                 epn = (float)Math.sqrt(epn);
                 encSim.append(String.format(" %.2f", dot / (e0n * epn)));
             }
-            log.info(encSim.toString());
-            log.info(vInfo.toString());
+            vlog(encSim.toString());
+            vlog(vInfo.toString());
             // CrossV cosine similarity: compare position 0 vs others
             StringBuilder simInfo = new StringBuilder("  crossV[0] V[0]·V[p] sim:");
             float[] cV0 = kvCache.crossV[0].data();
@@ -422,7 +461,7 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                 vpn = (float)Math.sqrt(vpn);
                 simInfo.append(String.format(" %.3f", dot / (v0n0 * vpn)));
             }
-            log.info(simInfo.toString());
+            vlog(simInfo.toString());
             // Log v_proj weight Frobenius norm for cross-attention layer 0
             String vpKey = "model.decoder.layers.0.encoder_attn.v_proj.weight";
             Tensor vpW = decoderWeights.get(vpKey);
@@ -451,10 +490,10 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                 float[] cV0data = kvCache.crossV[0].data();
                 float v0norm = 0; for (int j = 0; j < dM; j++) v0norm += cV0data[j] * cV0data[j];
                 v0norm = (float)Math.sqrt(v0norm);
-                log.info("  v_proj weight shape=[{},{}] ||W||_F={} ||enc[0]||={} -> ||V[0]||={}",
+                vlog("  v_proj weight shape=[{},{}] ||W||_F={} ||enc[0]||={} -> ||V[0]||={}",
                     vpShape[0], vpShape[1], String.format("%.0f", fn), String.format("%.0f", signalBefore), String.format("%.0f", v0norm));
             } else {
-                log.info("  v_proj weight NOT FOUND");
+                vlog("  v_proj weight NOT FOUND");
             }
         }
         if (!incremental) {
@@ -471,7 +510,7 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                         float avg = 0, min = Float.MAX_VALUE, max = 0;
                         for (float vv : lnW.data()) { float av = Math.abs(vv); avg += av; if (av < min) min = av; if (av > max) max = av; }
                         avg /= lnW.data().length;
-                        log.info(String.format("  LN L%d: avg=%.2f [%.2f-%.2f] %s", l, avg, min, max, lnName[0].replace(".weight","")));
+                        vlog(String.format("  LN L%d: avg=%.2f [%.2f-%.2f] %s", l, avg, min, max, lnName[0].replace(".weight","")));
                     }
                 }
             }
@@ -486,9 +525,9 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                     float avg = 0, min = Float.MAX_VALUE, max = 0;
                     for (float vv : lnW.data()) { float av = Math.abs(vv); avg += av; if (av < min) min = av; if (av > max) max = av; }
                     avg /= lnW.data().length;
-                    log.info(String.format("  global LN: avg=%.2f [%.2f-%.2f] %s", avg, min, max, lnCandidates[0].replace(".weight","")));
+                    vlog(String.format("  global LN: avg=%.2f [%.2f-%.2f] %s", avg, min, max, lnCandidates[0].replace(".weight","")));
                 } else {
-                    log.info("  global LN not found: {}", lnCandidates[0]);
+                    vlog("  global LN not found: {}", lnCandidates[0]);
                 }
             }
         }
@@ -498,34 +537,29 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                 float[] hd = hidden.data();
                 float hn = 0;
                 for (float v : hd) hn += v * v;
-                log.info(String.format("  step=%d L%d: ||H||=%.1f H[0..4]=[%.2f,%.2f,%.2f,%.2f,%.2f]",
+                vlog(String.format("  step=%d L%d: ||H||=%.1f H[0..4]=[%.2f,%.2f,%.2f,%.2f,%.2f]",
                     kvCache.step, layer, (float)Math.sqrt(hn),
                     hd[0], hd[1], hd[2], hd[3], hd[4]));
             }
         }
 
-        // LM head on the last (only) position
-        Tensor lmHead = findWeightAny(decoderWeights, "lm_head.weight", "model.lm_head.weight", "model.shared.weight");
-        if (lmHead == null) {
-            lmHead = findWeightAny(encoderWeights, "shared.weight", "model.encoder.embed_tokens.weight");
-        }
-        if (lmHead == null) {
-            lmHead = findWeightAny(decoderWeights, "shared.weight", "model.decoder.embed_tokens.weight");
-        }
+        // LM head — uses cached transposed weight (transposed once during model loading)
         if (kvCache.step <= 1) {
-            log.info("  LM head source: decoder.lm_head={} decoder.model.shared={} encoder.shared={} shape=[{},{}]",
-                decoderWeights.containsKey("lm_head.weight"),
-                decoderWeights.containsKey("model.shared.weight"),
-                encoderWeights.containsKey("shared.weight"),
-                lmHead.shape()[0], lmHead.shape()[1]);
+            String lmSrc;
+            if (decoderWeights.containsKey("lm_head.weight")) lmSrc = "decoder.lm_head";
+            else if (decoderWeights.containsKey("model.shared.weight")) lmSrc = "decoder.model.shared";
+            else if (encoderWeights.containsKey("shared.weight")) lmSrc = "encoder.shared";
+            else lmSrc = "unknown";
+            int[] ls = lmHeadWeightT.shape();
+            vlog("  LM head source: {} shape=[{},{}]", lmSrc, ls[1], ls[0]);
         }
 
-        Tensor logits = hidden.matmul(lmHead.transpose());
+        Tensor logits = hidden.matmul(lmHeadWeightT);
         // Apply final_logits_bias if present (HuggingFace convention)
         Tensor logitsBias = findWeightAny("final_logits_bias", "model.final_logits_bias");
         if (logitsBias != null && kvCache.step <= 1) {
             int nnz = 0; for (float v : logitsBias.data()) if (Math.abs(v) > 1e-6) nnz++;
-            log.info("  final_logits_bias shape=[{},{}], first={}, last={}, nnz={}",
+            vlog("  final_logits_bias shape=[{},{}], first={}, last={}, nnz={}",
                 logitsBias.shape().length > 0 ? logitsBias.shape()[0] : 0,
                 logitsBias.shape().length > 1 ? logitsBias.shape()[1] : 0,
                 logitsBias.getFlat(0), logitsBias.getFlat(logitsBias.data().length-1), nnz);
@@ -564,15 +598,15 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
             }
             // Cosine sim with lm_head[best]
             float embDot = 0, embNorm = 0;
-            if (best >= 0 && best < lmHead.shape()[0]) {
+            if (best >= 0 && best < lmHeadWeightT.shape()[1]) {
                 for (int j = 0; j < D_MODEL; j++) {
-                    float hv = hidden.get(0, j), lv = lmHead.get(best, j);
+                    float hv = hidden.get(0, j), lv = lmHeadWeightT.get(j, best);
                     embDot += hv * lv; embNorm += lv * lv;
                 }
                 embNorm = (float) Math.sqrt(embNorm);
             }
             String cosEmb = (embNorm > 0) ? String.format(" cos(h,emb[%d])=%.3f", best, embDot / (hNorm * embNorm)) : "";
-            log.info(String.format("  step=%d best=%d%s ||H||=%.1f ||E||=%.1f%s%s",
+            vlog(String.format("  step=%d best=%d%s ||H||=%.1f ||E||=%.1f%s%s",
                 kvCache.step, best, topStr, hNorm, eNorm, cosStr, cosEmb));
         }
         prevHiddenState = hidden.copy();
@@ -621,12 +655,12 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                 for (float vv : lnW.data()) { float av = Math.abs(vv); lnAvg += av; if (av > lnMax) lnMax = av; if (av < lnMin) lnMin = av; }
                 lnAvg /= lnW.data().length;
             }
-            log.info(String.format("  L%d attn: ||q||=%.1f ||k||=%.1f ||v||=%.1f ||attnOut||=%.1f ||proj||=%.1f LNw=%.2f[%.2f-%.2f]",
+            vlog(String.format("  L%d attn: ||q||=%.1f ||k||=%.1f ||v||=%.1f ||attnOut||=%.1f ||proj||=%.1f LNw=%.2f[%.2f-%.2f]",
                 layerIdx, (float)Math.sqrt(qn), (float)Math.sqrt(kn),
                 (float)Math.sqrt(vn), (float)Math.sqrt(an), (float)Math.sqrt(pn), lnAvg, lnMin, lnMax));
             if (layerIdx == 5 && lnW != null) {
                 float[] wd = lnW.data();
-                log.info(String.format("  L5 LNw first5: %.3f %.3f %.3f %.3f %.3f  last5: %.3f %.3f %.3f %.3f %.3f",
+                vlog(String.format("  L5 LNw first5: %.3f %.3f %.3f %.3f %.3f  last5: %.3f %.3f %.3f %.3f %.3f",
                     wd[0], wd[1], wd[2], wd[3], wd[4],
                     wd[wd.length-5], wd[wd.length-4], wd[wd.length-3], wd[wd.length-2], wd[wd.length-1]));
             }
@@ -634,7 +668,7 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
         hidden = layerNorm(residual.add(attnProj), ln1Prefix, ln1Alt);
         if (!incremental) {
             float[] hdSA = hidden.data(); float hnSA = 0; for (float vv : hdSA) hnSA += vv*vv;
-            log.info(String.format("  L%d after self-attn LN: ||hidden||=%.1f",
+            vlog(String.format("  L%d after self-attn LN: ||hidden||=%.1f",
                 layerIdx, (float)Math.sqrt(hnSA)));
         }
 
@@ -652,7 +686,7 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
         if (!incremental) {
             float[] hdBA = hidden.data(); float hnBA = 0; for (float vv : hdBA) hnBA += vv*vv;
             float[] cd = crossOutput.data(); float cn = 0; for (float vv : cd) cn += vv*vv;
-            log.info(String.format("  L%d cross: ||hidden||=%.1f -> ||crossOut||=%.1f",
+            vlog(String.format("  L%d cross: ||hidden||=%.1f -> ||crossOut||=%.1f",
                 layerIdx, (float)Math.sqrt(hnBA), (float)Math.sqrt(cn)));
             // Log cross-attention softmax weights for layer 0, first position
             if (layerIdx == 0 && kvCache.step == 0) {
@@ -674,20 +708,20 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
                     wInfo.append(String.format("  h%d:", h));
                     for (int j = 0; j < encLen; j++) wInfo.append(String.format(" %.2f", scores[j] / sumExp));
                 }
-                log.info(wInfo.toString());
+                vlog(wInfo.toString());
             }
         }
         Tensor crossProj = linear(crossOutput, crossPrefix + "out_proj", crossAlt + "out_proj");
         if (!incremental) {
             float[] cpd = crossProj.data(); float cpn = 0; for (float vv : cpd) cpn += vv*vv;
             float[] hdCA = residual.data(); float hnCA = 0; for (float vv : hdCA) hnCA += vv*vv;
-            log.info(String.format("  L%d cross: ||crossProj||=%.1f (resid=%.1f)",
+            vlog(String.format("  L%d cross: ||crossProj||=%.1f (resid=%.1f)",
                 layerIdx, (float)Math.sqrt(cpn), (float)Math.sqrt(hnCA)));
         }
         hidden = layerNorm(residual.add(crossProj), ln2Prefix, ln2Alt);
         if (!incremental) {
             float[] hdCA = hidden.data(); float hnCA = 0; for (float vv : hdCA) hnCA += vv*vv;
-            log.info(String.format("  L%d after cross-attn LN: ||hidden||=%.1f",
+            vlog(String.format("  L%d after cross-attn LN: ||hidden||=%.1f",
                 layerIdx, (float)Math.sqrt(hnCA)));
         }
 
@@ -708,7 +742,7 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
             float[] f1d = fc1.data(); float f1n = 0; for (float vv : f1d) f1n += vv*vv;
             float[] f2d = fc2.data(); float f2n = 0; for (float vv : f2d) f2n += vv*vv;
             float[] hdBN = residual.data(); float hnBN = 0; for (float vv : hdBN) hnBN += vv*vv;
-            log.info(String.format("  L%d ffn: resid=%.1f fc1=%.1f fc2=%.1f",
+            vlog(String.format("  L%d ffn: resid=%.1f fc1=%.1f fc2=%.1f",
                 layerIdx, (float)Math.sqrt(hnBN), (float)Math.sqrt(f1n), (float)Math.sqrt(f2n)));
         }
         hidden = layerNorm(residual.add(fc2), ln3Prefix, ln3Alt);
@@ -722,7 +756,7 @@ public class JavaEncoderDecoderRuntime implements ModelRuntime {
             Tensor lnW = findWeightAny(lnWNames);
             float lnAvg = 0;
             if (lnW != null) { for (float vv : lnW.data()) lnAvg += Math.abs(vv); lnAvg /= lnW.data().length; }
-            log.info(String.format("  L%d after FFN LN: ||hidden||=%.1f LNw=%.2f",
+            vlog(String.format("  L%d after FFN LN: ||hidden||=%.1f LNw=%.2f",
                 layerIdx, (float)Math.sqrt(hnFFN), lnAvg));
         }
 
