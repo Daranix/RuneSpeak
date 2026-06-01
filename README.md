@@ -26,7 +26,7 @@
 
 ## How it works
 
-RuneSpeak downloads `opus-mt` (MarianMT) translation models from HuggingFace and runs them locally via ONNX Runtime. The plugin detects in-game text, sends it to the translation model, and displays the result as an overlay on screen or by replacing the original widget text.
+RuneSpeak downloads `opus-mt` (MarianMT) translation models from HuggingFace and runs them locally with a pure-Java inference engine — no native libraries, no Python, no external runtime. The plugin detects in-game text, sends it to the translation model, and displays the result as an overlay on screen or by replacing the original widget text.
 
 ### Architecture
 
@@ -35,9 +35,17 @@ Widget/Text detected → Capturer (DialogCapture, MenuCapture, etc.)
                     → LocalTranslator
                         → TranslationCache (LRU cache)
                         → OnnxTranslationEngine
-                            → ONNX Runtime → opus-mt model
+                            → JavaEncoderDecoderRuntime (pure-Java inference)
+                                → ONNX model weights
                     → Overlay / Widget replacement
 ```
+
+The `JavaEncoderDecoderRuntime` is a hand-written encoder-decoder inference loop (MarianMT architecture: 6 layers, 512-dim model, 8 attention heads). It reads ONNX weight files directly and runs inference entirely in pure Java — no native libraries, no ONNX Runtime, no Python, no external dependencies. Key optimizations include:
+
+- **Repetition penalty** (1.2×) to prevent models from looping or copying input
+- **LM head weight transpose caching** — the 133 MB `lm_head.weight` matrix is transposed once at load time, avoiding an expensive matrix transpose on every decoder step
+- **i-k-j loop ordering** in `Tensor.matmul()` for sequential memory access patterns
+- **Dynamic max length** — capped at 200 tokens to prevent runaway generation on corrupted input
 
 ### Capturers
 
@@ -52,20 +60,51 @@ Widget/Text detected → Capturer (DialogCapture, MenuCapture, etc.)
 
 ## Supported languages
 
-28 languages including Spanish, French, German, Portuguese, Japanese, Korean, Chinese (Simplified/Traditional), Russian, Arabic, Hindi, and more.
+28 languages are defined in the enum (Spanish, French, German, Italian, Portuguese, Dutch, Polish, Romanian, Russian, Japanese, Korean, Chinese Simplified/Traditional, Arabic, Hindi, Turkish, Vietnamese, Thai, Indonesian, Swedish, Norwegian, Danish, Finnish, Greek, Czech, Hungarian, Ukrainian).
 
-Models are downloaded automatically based on the selected language pair.
+**ONNX models currently available** (confirmed tested):
+
+| Model | Language pair |
+|---|---|
+| `onnx-community/opus-mt-en-es` | English → Spanish |
+| `onnx-community/opus-mt-en-fr` | English → French |
+| `onnx-community/opus-mt-en-de` | English → German |
+| `onnx-community/opus-mt-en-nl` | English → Dutch |
+| `onnx-community/opus-mt-en-ru` | English → Russian |
+| `onnx-community/opus-mt-en-zh` | English → Chinese (Simplified) |
+| `onnx-community/opus-mt-en-ar` | English → Arabic |
+| `Xenova/opus-mt-en-it` | English → Italian |
+
+Models are downloaded automatically based on the selected language pair. The plugin constructs the model ID from the source-target two-letter codes (`onnx-community/opus-mt-{src}-{tgt}`). If no ONNX variant exists for a pair, the plugin falls back to the default Spanish model.
 
 ## Requirements
 
 - RuneLite
 - Java 11
-- Internet connection for initial model download
+- Internet connection for initial model download (~130 MB per model)
+- ~200 MB disk space per model (models are cached locally at `.runelite/runespeak/` or a custom path)
+- CPU with AVX support recommended for performance
 
 ## Build
 
 ```bash
 ./gradlew build
+```
+
+## Test
+
+```bash
+# Run all translation inference tests (downloads models on first run)
+./gradlew test --tests "com.runespeak.translate.JavaEncoderDecoderRuntimeTest"
+```
+
+Tests verify translation output for all 8 available models (43 test cases). Models are cached locally — subsequent runs skip downloads.
+
+## Benchmark
+
+```bash
+# Run speed benchmarks across all available models
+./gradlew runBenchmark -Prunespeak.cache=/path/to/cache
 ```
 
 ## Run
@@ -101,19 +140,24 @@ The plugin appears in the RuneLite side panel with a rune icon, showing model st
 
 ## Supported engines
 
-RuneSpeak uses ONNX Runtime to run translation models. Two model architectures are supported:
+RuneSpeak runs translation models entirely in pure Java on CPU — no native code, no external runtimes, no Python.
 
-- **EncoderDecoderRuntime** — for encoder-decoder models (e.g., `opus-mt`)
-- Extensible via `ModelRuntimeProvider` for custom model formats
+- **JavaEncoderDecoderRuntime** — a from-scratch encoder-decoder inference engine for MarianMT (`opus-mt`) models. Handles tokenization (BPE), embedding, sinusoidal positional encoding, 6-layer transformer encoder/decoder with multi-head self-attention and cross-attention, feed-forward blocks, layer normalization, autoregressive decoding with repetition penalty, and detokenization — all in pure Java.
+- Models are provided via `EncoderDecoderRuntimeProvider` (matches `opus-mt`, `Helsinki-NLP`, or `Xenova` model IDs).
+- The interface is extensible — custom `ModelRuntimeProvider` implementations can support other architectures (T5, NLLB, etc.).
+
+**There is no ONNX Runtime dependency.** The engine reads ONNX weight files (which are just serialized tensors) and performs all matrix operations with its own `Tensor` class — hand-written matmul, softmax, layer norm, transpose, and element-wise ops.
 
 > **Note on translation quality**: RuneSpeak uses AI models for translation, not a dictionary. Translations are generated by a machine learning model and may contain errors, awkward phrasing, or mistranslations — especially for slang, abbreviations, or Old School RuneScape-specific terminology. Quality varies by language pair.
 
 ## Limitations
 
-- First load can take several seconds while downloading the ONNX model
-- Translation is not instant — ~100-500ms latency per sentence
-- Variable memory usage depending on the model (~200-800 MB)
-- Not all game text can be translated — the plugin respects permanent UI interfaces (inventory, prayers, spells, etc.)
+- **Model availability**: Only 8 language pairs have ONNX-converted `opus-mt` models available. Other languages defined in the plugin will fall back to the default English→Spanish model until ONNX versions are published.
+- **First load** can take several seconds while downloading the ONNX model (~130 MB)
+- **Translation latency** — ~100–500ms per sentence on CPU
+- **Memory usage** — ~200–800 MB depending on the model
+- **Not all game text can be translated** — the plugin respects permanent UI interfaces (inventory, prayers, spells, etc.)
+- **Translation quality** varies by language pair and may produce awkward phrasing for OSRS-specific terminology
 
 ## Roadmap
 

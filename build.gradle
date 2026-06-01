@@ -61,4 +61,5 @@ tasks.register('runRuneLite', JavaExec) {
 
 test {
     jvmArgs '-Xmx4g'
+    jvmArgs '-Dfile.encoding=UTF-8'
 }
