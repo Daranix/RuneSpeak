@@ -161,3 +161,7 @@ New high-end PvM boss plugins are not accepted as a blanket policy.
 
 - No adult or overtly sexual content
 - No plugins that use player-provided IDs for their entire functionality (causes moderation issues)
+
+## Shell & Agent Interaction
+
+- In PowerShell, NEVER use `2>&1` before piping to `Select-String` — it corrupts binary stream output and causes infinite hangs. Pipe stdout only, or use `2>&1 | Out-Null` then a separate command.

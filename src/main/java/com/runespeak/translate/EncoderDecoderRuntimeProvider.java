@@ -10,6 +10,6 @@ public class EncoderDecoderRuntimeProvider implements ModelRuntimeProvider {
 
     @Override
     public ModelRuntime create(String modelId) {
-        return new EncoderDecoderRuntime(modelId);
+        return new JavaEncoderDecoderRuntime(modelId);
     }
 }

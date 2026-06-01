@@ -1,7 +1,5 @@
 package com.runespeak.translate;
 
-import ai.onnxruntime.OrtEnvironment;
-import com.runespeak.NativeLibraryManager;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -26,15 +24,12 @@ public class OnnxTranslationEngine {
     private String currentModelId;
 
     private ModelRuntime runtime;
-    private OrtEnvironment ortEnv;
     private Path modelsDir;
     private final com.google.gson.Gson gson;
-    private final NativeLibraryManager nativeLibs;
 
     public OnnxTranslationEngine(Path runespeakDir, com.google.gson.Gson gson) {
         this.modelsDir = runespeakDir.resolve("models");
         this.gson = gson;
-        this.nativeLibs = new NativeLibraryManager(runespeakDir);
     }
 
     public synchronized void setBaseDir(Path runespeakDir) {
@@ -56,13 +51,11 @@ public class OnnxTranslationEngine {
         shutdown();
         loading = true;
         currentModelId = modelId;
-        log.debug("Set loading=true, currentModelId={}", modelId);
 
         try {
             log.info("Creating models directory: {}", modelsDir);
             Files.createDirectories(modelsDir);
             Path modelPath = modelsDir.resolve(sanitizeModelId(modelId));
-            log.debug("Model path: {}", modelPath);
 
             ModelRuntime newRuntime = ModelRuntime.forModelId(modelId);
 
@@ -70,22 +63,12 @@ public class OnnxTranslationEngine {
                 downloadIfMissing(modelId, modelPath, file);
             }
 
-            Path tokenizerPath = modelPath.resolve("tokenizer.json");
-            sanitizeTokenizerJson(tokenizerPath);
-
-            log.debug("Ensuring native libraries are loaded");
-            nativeLibs.ensure();
-            log.debug("Creating OrtEnvironment");
-            ortEnv = OrtEnvironment.getEnvironment();
-            log.debug("OrtEnvironment created: {}", ortEnv);
-
-            log.debug("Loading model via runtime: {}", newRuntime.getClass().getSimpleName());
-            newRuntime.load(modelPath, ortEnv);
-            log.debug("Model loaded via runtime");
+            log.info("Loading model via runtime: {}", newRuntime.getClass().getSimpleName());
+            newRuntime.load(modelPath);
 
             this.runtime = newRuntime;
             loaded = true;
-            log.info("ONNX model loaded successfully: {}", modelId);
+            log.info("Model loaded successfully: {}", modelId);
         } catch (Throwable t) {
             loaded = false;
             log.error("Failed to load model {}: {}", modelId, t.getMessage(), t);
@@ -93,68 +76,6 @@ public class OnnxTranslationEngine {
             throw new IOException("Failed to load model: " + modelId, t);
         } finally {
             loading = false;
-            log.debug("Set loading=false for model {}", modelId);
-        }
-    }
-
-    private void sanitizeTokenizerJson(Path tokenizerPath) {
-        if (!Files.exists(tokenizerPath)) {
-            return;
-        }
-        try {
-            log.debug("Sanitizing tokenizer.json at {}", tokenizerPath);
-            byte[] bytes = Files.readAllBytes(tokenizerPath);
-            String content = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
-            if (!content.contains("\"Precompiled\"")) {
-                return;
-            }
-
-            com.google.gson.Gson gson = this.gson;
-            com.google.gson.JsonObject json = gson.fromJson(content, com.google.gson.JsonObject.class);
-            boolean modified = false;
-
-            if (json.has("normalizer")) {
-                com.google.gson.JsonElement normalizerElement = json.get("normalizer");
-                if (normalizerElement.isJsonObject()) {
-                    com.google.gson.JsonObject normalizer = normalizerElement.getAsJsonObject();
-                    if (normalizer.has("normalizers") && normalizer.get("normalizers").isJsonArray()) {
-                        com.google.gson.JsonArray normalizers = normalizer.getAsJsonArray("normalizers");
-                        com.google.gson.JsonArray newNormalizers = new com.google.gson.JsonArray();
-                        for (com.google.gson.JsonElement normElem : normalizers) {
-                            if (normElem.isJsonObject()) {
-                                com.google.gson.JsonObject normObj = normElem.getAsJsonObject();
-                                if (normObj.has("type") && "Precompiled".equals(normObj.get("type").getAsString())) {
-                                    if (!normObj.has("precompiled_charsmap") || normObj.get("precompiled_charsmap").isJsonNull()) {
-                                        log.debug("Removing Precompiled normalizer with null precompiled_charsmap");
-                                        modified = true;
-                                        continue;
-                                    }
-                                }
-                            }
-                            newNormalizers.add(normElem);
-                        }
-                        if (modified) {
-                            normalizer.add("normalizers", newNormalizers);
-                        }
-                    } else if (normalizer.has("type") && "Precompiled".equals(normalizer.get("type").getAsString())) {
-                        if (!normalizer.has("precompiled_charsmap") || normalizer.get("precompiled_charsmap").isJsonNull()) {
-                            log.debug("Removing root Precompiled normalizer with null precompiled_charsmap");
-                            json.remove("normalizer");
-                            modified = true;
-                        }
-                    }
-                }
-            }
-
-            if (modified) {
-                String sanitized = gson.toJson(json);
-                Files.write(tokenizerPath, sanitized.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                log.info("Successfully sanitized tokenizer.json");
-            } else {
-                log.info("No modifications needed for tokenizer.json");
-            }
-        } catch (Exception e) {
-            log.error("Failed to sanitize tokenizer.json: {}", e.getMessage(), e);
         }
     }
 

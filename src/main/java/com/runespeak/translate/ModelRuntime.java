@@ -1,6 +1,5 @@
 package com.runespeak.translate;
 
-import ai.onnxruntime.OrtEnvironment;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -10,7 +9,7 @@ public interface ModelRuntime {
     String getModelId();
     List<DownloadFile> getRequiredFiles();
 
-    void load(Path modelPath, OrtEnvironment ortEnv) throws IOException;
+    void load(Path modelPath) throws IOException;
     CompletableFuture<String> translate(String text, String srcLang, String tgtLang);
     void shutdown();
 

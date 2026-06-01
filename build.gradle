@@ -22,18 +22,9 @@ dependencies {
     compileOnly 'org.projectlombok:lombok:1.18.46'
     annotationProcessor 'org.projectlombok:lombok:1.18.46'
 
-    implementation 'com.microsoft.onnxruntime:onnxruntime:1.17.1'
-    implementation('ai.djl.huggingface:tokenizers:0.36.0') {
-        exclude group: 'com.microsoft.onnxruntime'
-    }
-
     testImplementation 'junit:junit:4.13.2'
     testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
     testImplementation group: 'net.runelite', name: 'jshell', version: runeLiteVersion
-
-    // logback 1.5.x supports SLF4J 2.x (required by tokenizers -> ai.djl -> slf4j-api:2.0.17)
-    // Overrides RuneLite's logback 1.2.9 which only supports SLF4J 1.7.x
-    testRuntimeOnly 'ch.qos.logback:logback-classic:1.5.13'
 }
 
 group = 'com.runespeak'
@@ -43,93 +34,6 @@ tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
     options.release.set(11)
 }
-
-// The packager's init script creates runelitePluginHubPackage as a Copy/Jar task that merges
-// runtimeClasspath into a fat jar. Add exclude patterns to keep its output under 10MB by
-// stripping native libraries (the ORT Java classes alone are ~500KB — safe to include).
-afterEvaluate {
-    tasks.matching { it.name == "runelitePluginHubPackage" }.configureEach { task ->
-        task.dependsOn shadowJar
-        task.duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-        task.exclude '**/*.so'
-        task.exclude '**/*.dll'
-        task.exclude '**/*.dylib'
-        task.exclude '**/*.jnilib'
-        task.exclude '**/*.dSYM/**'
-        task.exclude '**/*.a'
-        task.exclude '**/*.pdb'
-        task.exclude 'ai/onnxruntime/native/**'
-        task.exclude 'native/lib/**'
-        task.exclude 'com/sun/jna/**/*.so'
-        task.exclude 'com/sun/jna/**/*.dll'
-        task.exclude 'com/sun/jna/**/*.dylib'
-        task.exclude 'com/sun/jna/**/*.jnilib'
-        task.exclude 'ai/djl/modality/audio/**'
-        task.exclude 'ai/djl/Application$Audio.class'
-        task.exclude 'org/apache/commons/codec/cli/**'
-        task.exclude 'org/apache/commons/compress/archivers/Lister*'
-        task.exclude 'org/apache/commons/compress/archivers/sevenz/CLI*'
-        task.exclude 'org/apache/commons/compress/harmony/**'
-        task.exclude 'ai/djl/training/**'
-        task.exclude 'ai/djl/util/cuda/CudaUtils*'
-
-        task.doLast {
-            logger.lifecycle("Patching jar: redirecting System.out/err/in to _NoOp...")
-            com.runespeak.build.SystemOutPatcher.patchJar(task.archiveFile.get().asFile.toPath())
-        }
-    }
-}
-
-tasks.register('shadowJar', Jar) {
-    dependsOn configurations.runtimeClasspath
-    archiveFileName = "runespeak-${version}.jar"
-    manifest {
-        attributes('Main-Class': pluginMainClass, 'Multi-Release': true)
-    }
-
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-    from sourceSets.main.output
-    from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-    }
-
-    exclude 'META-INF/INDEX.LIST'
-    exclude 'META-INF/*.SF'
-    exclude 'META-INF/*.DSA'
-    exclude 'META-INF/*.RSA'
-    exclude '**/module-info.class'
-
-    exclude '**/*.pdb'
-    exclude '**/*.dSYM/**'
-    exclude '**/*.a'
-
-    exclude '**/*.so'
-    exclude '**/*.dll'
-    exclude '**/*.dylib'
-    exclude '**/*.jnilib'
-    exclude 'ai/onnxruntime/native/**'
-    exclude 'native/lib/**'
-    exclude 'com/sun/jna/**/*.so'
-    exclude 'com/sun/jna/**/*.dll'
-    exclude 'com/sun/jna/**/*.dylib'
-    exclude 'com/sun/jna/**/*.jnilib'
-    exclude 'ai/djl/modality/audio/**'
-    exclude 'ai/djl/Application$Audio.class'
-    exclude 'org/apache/commons/codec/cli/**'
-    exclude 'org/apache/commons/compress/archivers/Lister*'
-    exclude 'org/apache/commons/compress/archivers/sevenz/CLI*'
-    exclude 'org/apache/commons/compress/harmony/**'
-    exclude 'ai/djl/training/**'
-    exclude 'ai/djl/util/cuda/CudaUtils*'
-
-    doLast {
-        logger.lifecycle("Patching jar: redirecting System.out/err/in to _NoOp...")
-        com.runespeak.build.SystemOutPatcher.patchJar(archiveFile.get().asFile.toPath())
-    }
-}
-
 tasks.register('runBenchmark', JavaExec) {
     group = 'runespeak'
     description = 'Run translation benchmark across models'
@@ -155,4 +59,5 @@ tasks.register('runRuneLite', JavaExec) {
 }
 
 test {
+    jvmArgs '-Xmx4g'
 }
